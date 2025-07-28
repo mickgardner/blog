@@ -7,8 +7,8 @@ import (
 	"log"
 )
 
-func StartDB(dbname string, config config.Config) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(dbname), &gorm.Config{})
+func SetupDatabase(config config.Config) *gorm.DB {
+	db, err := gorm.Open(sqlite.Open(config.DBName), &gorm.Config{})
 	if err != nil {
 		log.Fatalln("Database unable to be created: ", err)
 	}

@@ -6,6 +6,10 @@ import (
 	"github.com/gofiber/template/django/v3"
 	"log"
 	"net/http"
+
+	"github.com/mickgardner/blog/internal/config"
+	"github.com/mickgardner/blog/internal/database"
+	"gorm.io/gorm"
 )
 
 //go:embed all:static
@@ -14,20 +18,34 @@ var staticAssets embed.FS
 //go:embed templates
 var templateAssets embed.FS
 
+type App struct {
+	Config config.Config
+	DB     *gorm.DB
+	Router *fiber.App
+}
+
 func main() {
 	log.Println("Welcome to the blog app.")
+	app := App{}
+	app.DB = database.SetupDatabase(app.Config)
+	app.SetupTemplatesAndStaticFiles()
+	app.DefineRoutes()
+
+	log.Fatal(app.Router.Listen(":3000"))
+}
+
+func (a *App) SetupTemplatesAndStaticFiles() {
 	engine := django.NewPathForwardingFileSystem(http.FS(templateAssets), "/templates", ".html")
-	//engine := django.New("./templates", ".html")
-	mux := fiber.New(fiber.Config{
+	a.Router = fiber.New(fiber.Config{
 		Views: engine,
 	})
-	mux.Static("/static", "static")
+	a.Router.Static("/static", "static")
+}
 
-	mux.Get("/", IndexHandler)
-	mux.Get("/article/:slug", ArticleHandler)
-	mux.Get("/about", AboutHandler)
-
-	log.Fatal(mux.Listen(":3000"))
+func (a *App) DefineRoutes() {
+	a.Router.Get("/", IndexHandler)
+	a.Router.Get("/article/:slug", ArticleHandler)
+	a.Router.Get("/about", AboutHandler)
 }
 
 func IndexHandler(c *fiber.Ctx) error {
