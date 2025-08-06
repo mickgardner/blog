@@ -1,0 +1,13 @@
+<div>
+  <h2>Login</h2>
+
+  {% if Error %}
+  <div class="error">{{ Error }}</div>
+  {% endif %}
+
+  <form action="/login" method="POST">
+    <input type="hidden" name="_token" value="{{ csrf_token }}">
+    <input type="email" name="email" placeholder="Enter your email" required>
+    <button type="submit">Send Verification Code</button>
+  </form>
+</div>

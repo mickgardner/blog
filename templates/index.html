@@ -1,5 +1,10 @@
 <div>
-This is the homepage!
+  This is the homepage!
 
-Message: {{ Message }}
+  Message: {{ Message }}
+
+  <h2>Articles</h2>
+  {% for article in Articles %}
+  <li><a href="/article/{{ article.Slug }}">{{ article.Title }}</li>
+  {% endfor %}
 </div>

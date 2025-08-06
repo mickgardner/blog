@@ -3,13 +3,11 @@ package main
 import (
 	"embed"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/gofiber/template/django/v3"
+	"gorm.io/gorm"
 	"log"
 	"net/http"
-
-	"github.com/mickgardner/blog/internal/config"
-	"github.com/mickgardner/blog/internal/database"
-	"gorm.io/gorm"
 )
 
 //go:embed all:static
@@ -19,17 +17,24 @@ var staticAssets embed.FS
 var templateAssets embed.FS
 
 type App struct {
-	Config config.Config
-	DB     *gorm.DB
-	Router *fiber.App
+	Config       Config
+	DB           *gorm.DB
+	Router       *fiber.App
+	EmailService EmailService
+	SessionStore *session.Store
 }
 
 func main() {
-	log.Println("Welcome to the blog app.")
+	log.Println("Starting blog application...")
 	app := App{}
-	app.DB = database.SetupDatabase(app.Config)
+	app.Config = LoadConfig()
+	app.DB = SetupDatabase(app.Config)
+	app.SetupEmailService()
+	app.SetupSessions()
+	app.SeedDatabase()
 	app.SetupTemplatesAndStaticFiles()
 	app.DefineRoutes()
+	log.Println("Welcome to the blog app.")
 
 	log.Fatal(app.Router.Listen(":3000"))
 }
@@ -43,31 +48,20 @@ func (a *App) SetupTemplatesAndStaticFiles() {
 }
 
 func (a *App) DefineRoutes() {
-	a.Router.Get("/", IndexHandler)
-	a.Router.Get("/article/:slug", ArticleHandler)
-	a.Router.Get("/about", AboutHandler)
-}
+	a.Router.Use(a.CSRFMiddleware())
+	a.Router.Use(a.InjectUserMiddleware)
 
-func IndexHandler(c *fiber.Ctx) error {
-	log.Println("IndexHandler")
-	return c.Render("index", fiber.Map{
-		"Title":   "Blog Homepage",
-		"Message": "Hello Blog",
-	}, "layouts/base")
-}
+	a.Router.Get("/", a.IndexHandler)
+	a.Router.Get("/article/:slug", a.ArticleHandler)
+	a.Router.Get("/about", a.AboutHandler)
 
-func ArticleHandler(c *fiber.Ctx) error {
-	log.Println("ArticleHandler")
-	return c.Render("article", fiber.Map{
-		"Title":   "<blog keywords and title>",
-		"Message": "Blog Article",
-	}, "layouts/base")
-}
+	// Authentication routes
+	a.Router.Get("/login", a.LoginHandler)
+	a.Router.Post("/login", a.RequestCodeHandler)
+	a.Router.Post("/verify", a.VerifyCodeHandler)
+	a.Router.Get("/logout", a.LogoutHandler)
 
-func AboutHandler(c *fiber.Ctx) error {
-	log.Println("AboutHandler")
-	return c.Render("pages/about", fiber.Map{
-		"Title":   "About Page",
-		"Message": "About Page",
-	}, "layouts/base")
+	// Protected Routes
+	a.Router.Get("/dashboard", a.RequireAuth, a.DashboardHandler)
+	a.Router.Get("/user/profile", a.RequireAuth, a.ProfileHandler)
 }

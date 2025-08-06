@@ -2,5 +2,11 @@
   <nav>
     <a href="/">Home</a>
     <a href="/about">About</a>
+    {% if User %}
+    <a href="/dashboard">Dashboard</a>
+    <a href="/logout">Logout</a>
+    {% else %}
+    <a href="/login">Login</a>
+    {% endif %}
   </nav>
 </header>
