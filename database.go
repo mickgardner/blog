@@ -13,7 +13,7 @@ func SetupDatabase(config Config) *gorm.DB {
 	}
 	if config.Env == "Development" {
 		log.Println("Automigrating...")
-		db.AutoMigrate(Article{}, VerificationCode{}, User{}, EmailQueue{})
+		db.AutoMigrate(Article{}, VerificationCode{}, User{}, EmailQueue{}, Invitation{})
 	}
 
 	return db

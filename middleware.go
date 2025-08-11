@@ -70,3 +70,14 @@ func (a *App) CSRFMiddleware() fiber.Handler {
 		},
 	})
 }
+
+func (a *App) RequireAdmin(c *fiber.Ctx) error {
+	user, err := a.GetCurrentUser(c)
+	if err != nil || !user.IsAdmin {
+		return c.Status(403).Render("errors/403", fiber.Map{
+			"Title": "Access Denied",
+			"Error": "You must be an administrator to access this page.",
+		}, "layouts/base")
+	}
+	return c.Next()
+}

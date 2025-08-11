@@ -61,7 +61,12 @@ func (a *App) DefineRoutes() {
 	a.Router.Post("/verify", a.VerifyCodeHandler)
 	a.Router.Get("/logout", a.LogoutHandler)
 
+	a.Router.Get("/register", a.RegisterHandler)
+	a.Router.Post("/register", a.ProcessRegistrationHandler)
+
 	// Protected Routes
 	a.Router.Get("/dashboard", a.RequireAuth, a.DashboardHandler)
 	a.Router.Get("/user/profile", a.RequireAuth, a.ProfileHandler)
+	a.Router.Get("/admin/invite", a.RequireAuth, a.RequireAdmin, a.InviteFormHandler)
+	a.Router.Post("/admin/invite", a.RequireAuth, a.RequireAdmin, a.SendInviteHandler)
 }

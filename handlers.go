@@ -104,6 +104,7 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 	// Verify the code
 	_, err := a.VerifyCode(email, code)
 	if err != nil {
+		log.Printf("Verify Code attempt failed for %s, with error %s ", email, err)
 		return c.Render("auth/verify", fiber.Map{
 			"Title":      "Enter Code",
 			"csrf_token": c.Locals("csrf_token"),
@@ -112,17 +113,19 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 		}, "layouts/base")
 	}
 
-	// Get or create user.
-	user, err := a.GetOrCreateUser(email, "")
+	// Login or fail...
+	user, err := a.GetUserByEmail(email)
 	if err != nil {
+		log.Printf("Login attempt failed for %s: user not found", email)
 		return c.Render("auth/verify", fiber.Map{
 			"Title":      "Enter Code",
 			"csrf_token": c.Locals("csrf_token"),
-			"Error":      "Failed to create user account",
+			"Error":      "Login failed. Please check your details or contact support.",
 		}, "layouts/base")
 	}
 	log.Println("User Created: ", user)
 
+	// Login successful.
 	err = a.CreateUserSession(c, user)
 	if err != nil {
 		log.Printf("Failed to create session: %v", err)
@@ -162,5 +165,106 @@ func (a *App) DashboardHandler(c *fiber.Ctx) error {
 func (a *App) ProfileHandler(c *fiber.Ctx) error {
 	return c.Render("pages/profile", fiber.Map{
 		"Title": "Profile",
+	}, "layouts/base")
+}
+
+func (a *App) SendInviteHandler(c *fiber.Ctx) error {
+	user, err := a.GetCurrentUser(c)
+	if err != nil || !user.IsAdmin {
+		return c.Status(403).Render("errors/403", fiber.Map{
+			"Title": "Access Denied",
+		}, "layouts/base")
+	}
+
+	email := c.FormValue("email")
+	//TODO: Is there any more validations required for testing the email address???
+	if email == "" {
+		return c.Render("admin/invite", fiber.Map{
+			"Title":      "Send Invitation",
+			"Error":      "Email address is required",
+			"csrf_token": c.Locals("csrf_token"),
+		}, "layouts/base")
+	}
+
+	invitation, err := a.CreateInvitation(user.ID, email)
+	if err != nil {
+		return c.Render("admin/invite", fiber.Map{
+			"Title":      "Send Invitation",
+			"Error":      err.Error(),
+			"csrf_token": c.Locals("csrf_token"),
+		}, "layouts/base")
+	}
+
+	err = a.EmailService.SendInvitation(email, invitation.Token)
+	if err != nil {
+		return c.Render("admin/invite", fiber.Map{
+			"Title":      "Send Invitation",
+			"Error":      "Failed to send invitation email",
+			"csrf_token": c.Locals("csrf_token"),
+		}, "layouts/base")
+	}
+
+	return c.Render("admin/invite", fiber.Map{
+		"Title":      "Send Invitation",
+		"Success":    "Invitation sent successfully to " + email,
+		"csrf_token": c.Locals("csrf_token"),
+	}, "layouts/base")
+}
+
+func (a *App) RegisterHandler(c *fiber.Ctx) error {
+	token := c.Query("token")
+	invitation, err := a.ValidateInvitationToken(token)
+	if err != nil {
+		return c.Render("auth/invalid-invitation", fiber.Map{
+			"Title": "Invalid Invitation",
+		}, "layouts/base")
+	}
+
+	return c.Render("auth/register", fiber.Map{
+		"Title": "Complete Registration",
+		"Token": token,
+		"Email": invitation.Email,
+	}, "layouts/base")
+}
+
+func (a *App) ProcessRegistrationHandler(c *fiber.Ctx) error {
+	token := c.FormValue("token")
+	email := c.FormValue("email")
+	fullName := c.FormValue("full_name")
+
+	//TODO: Are these the only validations required? We could do better.
+	if token == "" || email == "" || fullName == "" {
+		return c.Render("auth/register", fiber.Map{
+			"Title":      "Complete Registration",
+			"Token":      token,
+			"Email":      email,
+			"Error":      "All fields are required",
+			"csrf_token": c.Locals("csrf_token"),
+		}, "layouts/base")
+	}
+
+	user, err := a.CompleteRegistration(token, email, fullName)
+	if err != nil {
+		return c.Render("auth/register", fiber.Map{
+			"Title":      "Complete Registration",
+			"Token":      token,
+			"Email":      email,
+			"Error":      "Registration failed: " + err.Error(),
+			"csrf_token": c.Locals("csrf_token"),
+		}, "layouts/base")
+	}
+
+	log.Printf("User registration completed: %s", user.EmailAddress)
+
+	return c.Render("auth/registration-success", fiber.Map{
+		"Title": "Registration Complete",
+		"Email": user.EmailAddress,
+	}, "layouts/base")
+}
+
+func (a *App) InviteFormHandler(c *fiber.Ctx) error {
+	return c.Render("admin/invite", fiber.Map{
+		"Title":      "Send Invitation",
+		"csrf_token": c.Locals("csrf_token"),
 	}, "layouts/base")
 }

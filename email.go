@@ -11,6 +11,29 @@ import (
 	"net/smtp"
 )
 
+type EmailService interface {
+	SendVerificationCode(email, code string) error
+	SendInvitation(email, token string) error
+}
+
+type SMTPEmailService struct {
+	Host      string
+	Port      string
+	Username  string
+	Password  string
+	FromEmail string
+	FromName  string
+}
+
+type MailgunEmailService struct {
+	Domain    string
+	APIKey    string
+	FromEmail string
+	FromName  string
+}
+
+type ConsoleEmailService struct{}
+
 type EmailQueue struct {
 	Email       string `gorm:"index"`
 	Code        string
@@ -111,10 +134,20 @@ func (a *App) notifyAdminEmailFailure(emailQueue *EmailQueue) {
 }
 
 func (c ConsoleEmailService) SendVerificationCode(email, code string) error {
-	log.Printf("\tVERIFICATION EMAIL")
-	log.Printf("\tTo: %s", email)
-	log.Printf("\tYour Verification code: %s", code)
-	log.Printf("\t (This code expires in 15 minutes)")
+	log.Printf("===VERIFICATION EMAIL===")
+	log.Printf("To: %s", email)
+	log.Printf("Your Verification code: %s", code)
+	log.Printf("(This code expires in 15 minutes)")
+	log.Printf("================================")
+	return nil
+}
+
+func (c ConsoleEmailService) SendInvitation(email, token string) error {
+	log.Printf("===INVITATION EMAIL===")
+	log.Printf("To: %s", email)
+	//TODO: I can see that if we alter the hostname or port this fails. Need config management of this data just incase.
+	log.Printf("Click here to register: http://localhost:3000/register?token=%s", token)
+	log.Printf("================================")
 	return nil
 }
 
@@ -145,6 +178,41 @@ Kind regards,
 		log.Printf("SMTP Error: %v", err)
 	}
 
+	log.Printf("SMTP email sent to %s", email)
+	return nil
+}
+
+func (s SMTPEmailService) SendInvitation(email, token string) error {
+	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
+
+	//TODO: add config for name of website instead of "our blog" perhaps??
+	subject := "You've been Invited to Join our Blog"
+	//TODO: There should be config parameters used for domain/port here.
+	body := fmt.Sprintf(`
+		<h1>You're Invited!</h1>
+		<p>Click the link below to complete your registration:</p>
+		<a href="http://localhost:3000/register?token=%s">Complete Registration</a>
+		<p>This invitation expires in 7 days.</p>
+		<p>Kind regards</p>
+
+		<p>%s</p>
+		`, token, s.FromName)
+
+	//TODO: Make this into a generic sendEmail() function: It's being used more than once (see above).
+	message := fmt.Sprintf("From: %s <%s>\r\n"+
+		"To: %s\r\n"+
+		"Subject: %s\r\n"+
+		"\r\n"+
+		"%s\r\n", s.FromName, s.FromEmail, email, subject, body)
+
+	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
+	err := smtp.SendMail(addr, auth, s.FromEmail, []string{email}, []byte(message))
+	if err != nil {
+		//TODO: Where this fails, we need to notify the admin in some way / or log it in a 'log' table for someone to fix soon.
+		log.Printf("SMTP Error: %v", err)
+
+	}
+	//TODO: Log this sort of thing too (in a table).
 	log.Printf("SMTP email sent to %s", email)
 	return nil
 }
@@ -180,6 +248,47 @@ Kind regards,
 		return err
 	}
 
+	log.Printf("Mailgun email sent to %s", email)
+	return nil
+}
+
+// TODO: Fix this.
+func (m MailgunEmailService) SendInvitation(email, token string) error {
+	mg := mailgun.NewMailgun(m.Domain, m.APIKey)
+
+	//TODO: add config for name of website instead of "our blog" perhaps??
+	subject := "You're Invited to Join Our Blog"
+	//TODO: There should be config parameters used for domain/port here.
+	body := fmt.Sprintf(`
+	<h1>You're Invited!</h1>
+	<p>Click the link below to complete your registration:</p>
+	<a href="http://localhost:3000/register?token=%s">Complete Registration</a>
+	<p>This invitation expires in 7 days.</p>
+
+		<p>Kind regards</p>
+
+		<p>%s</p>
+	`, token, m.FromName)
+	message := mailgun.NewMessage(
+		fmt.Sprintf("%s <%s>", m.FromName, m.FromEmail),
+		subject,
+		"", // Plain text version, empty for now.
+		email,
+	)
+	//TODO: Make this into a generic sendEmail() function: It's being used more than once (see above).
+	message.SetHTML(body)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	_, _, err := mg.Send(ctx, message)
+	if err != nil {
+		//TODO: Where this fails, we need to notify the admin in some way / or log it in a 'log' table for someone to fix soon.
+		log.Printf("Mailgun Error: %v", err)
+		return err
+	}
+
+	//TODO: Log this sort of thing too (in a table).
 	log.Printf("Mailgun email sent to %s", email)
 	return nil
 }

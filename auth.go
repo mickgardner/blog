@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-type EmailService interface {
-	SendVerificationCode(email, code string) error
-}
-
-type ConsoleEmailService struct{}
-
 type VerificationCode struct {
 	Email     string `gorm:"index"`
 	Code      string `gorm:"size:10"`
@@ -25,22 +19,6 @@ type VerificationCode struct {
 	Used      bool `gorm:"default:false"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
-}
-
-type SMTPEmailService struct {
-	Host      string
-	Port      string
-	Username  string
-	Password  string
-	FromEmail string
-	FromName  string
-}
-
-type MailgunEmailService struct {
-	Domain    string
-	APIKey    string
-	FromEmail string
-	FromName  string
 }
 
 // Generate a cryptographically secure 6-digit code
