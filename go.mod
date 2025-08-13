@@ -9,6 +9,7 @@ require (
 	github.com/gofiber/template/django/v3 v3.1.14
 	github.com/joho/godotenv v1.5.1
 	github.com/mailgun/mailgun-go/v4 v4.23.0
+	golang.org/x/crypto v0.37.0
 	gorm.io/gorm v1.30.1
 )
 
@@ -43,7 +44,7 @@ require (
 	github.com/valyala/fasthttp v1.51.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
-	golang.org/x/text v0.20.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
 	modernc.org/libc v1.22.5 // indirect
 	modernc.org/mathutil v1.5.0 // indirect
 	modernc.org/memory v1.5.0 // indirect

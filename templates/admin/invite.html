@@ -1,0 +1,170 @@
+<div>
+  <h2>Send User Invitation</h2>
+
+  {% if Success %}
+  <div class="message success">
+    {{ Success }}
+  </div>
+  {% endif %}
+
+  {% if Error %}
+  <div class="error">
+    {{ Error }}
+  </div>
+  {% endif %}
+
+  <p>Invite a new user to join the blog. They will receive an email with a registration link.</p>
+
+  <form action="/admin/invite" method="POST">
+    <input type="hidden" name="_token" value="{{ csrf_token }}">
+    
+    <div class="form-group">
+      <label for="email">Email Address:</label>
+      <input 
+        type="email" 
+        id="email" 
+        name="email" 
+        placeholder="Enter the user's email address" 
+        required
+        autocomplete="email"
+      >
+      <small class="help-text">
+        An invitation email will be sent to this address with registration instructions.
+      </small>
+    </div>
+    
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Send Invitation</button>
+      <a href="/dashboard" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+
+  <div class="help-section">
+    <h3>How Invitations Work</h3>
+    <ul>
+      <li>The user will receive an email with a secure invitation link</li>
+      <li>The link expires in 7 days for security</li>
+      <li>They can complete their registration by setting a password and providing their name</li>
+      <li>Their email will be verified automatically upon registration</li>
+      <li>Only one invitation per email address can be active at a time</li>
+    </ul>
+  </div>
+
+  <style>
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+      color: #333;
+    }
+    
+    .form-group input {
+      width: 100%;
+      max-width: 400px;
+      padding: 0.75rem;
+      border: 2px solid #ddd;
+      border-radius: 4px;
+      font-size: 1rem;
+      transition: border-color 0.3s ease;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+    }
+    
+    .help-text {
+      display: block;
+      margin-top: 0.5rem;
+      color: #666;
+      font-size: 0.875rem;
+    }
+    
+    .form-actions {
+      margin-top: 2rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 4px;
+      font-size: 1rem;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      display: inline-block;
+      text-align: center;
+    }
+    
+    .btn-primary {
+      background-color: #007bff;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #0056b3;
+    }
+    
+    .btn-secondary {
+      background-color: #6c757d;
+      color: white;
+    }
+    
+    .btn-secondary:hover {
+      background-color: #545b62;
+    }
+    
+    .message {
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+    }
+    
+    .message.success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      padding: 1rem;
+      border-radius: 4px;
+      margin-bottom: 1.5rem;
+    }
+    
+    .help-section {
+      margin-top: 3rem;
+      padding: 1.5rem;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      border-left: 4px solid #007bff;
+    }
+    
+    .help-section h3 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+    
+    .help-section ul {
+      margin: 0;
+      padding-left: 1.5rem;
+    }
+    
+    .help-section li {
+      margin-bottom: 0.5rem;
+      color: #666;
+    }
+  </style>
+</div>

@@ -1,5 +1,5 @@
 <div>
-  <h2>Enter Verification Code</h2>
+  <h2>Email Verification</h2>
 
   {% if Message %}
   <div class="message">{{ Message }}</div>
@@ -9,10 +9,15 @@
   <div class="error">{{ Error }}</div>
   {% endif %}
 
+  <p>We've sent a verification code to <strong>{{ Email }}</strong></p>
+
   <form action="/verify" method="POST">
     <input type="hidden" name="_token" value="{{ csrf_token }}">
     <input type="hidden" name="email" value="{{ Email }}">
-    <input type="text" name="code" placeholder="123456" maxlength="6" required>
-    <button type="submit">Verify Code</button>
+    <div>
+      <label for="code">Verification Code:</label>
+      <input type="text" id="code" name="code" placeholder="123456" maxlength="6" required>
+    </div>
+    <button type="submit">Verify Email</button>
   </form>
 </div>

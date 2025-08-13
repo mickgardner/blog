@@ -25,6 +25,7 @@ type Config struct {
 	MailgunAPIKey    string
 	MailgunFromEmail string
 	MailgunFromName  string
+	AdminEmail       string
 }
 
 func LoadConfig() Config {
@@ -52,6 +53,7 @@ func LoadConfig() Config {
 		MailgunAPIKey:    os.Getenv("MAILGUN_API_KEY"),
 		MailgunFromEmail: os.Getenv("MAILGUN_FROM_EMAIL"),
 		MailgunFromName:  os.Getenv("MAILGUN_FROM_NAME"),
+		AdminEmail:       os.Getenv("ADMIN_EMAIL"),
 	}
 	log.Println(config)
 	return config

@@ -14,6 +14,7 @@ import (
 type EmailService interface {
 	SendVerificationCode(email, code string) error
 	SendInvitation(email, token string) error
+	SendPasswordReset(email, token string) error
 }
 
 type SMTPEmailService struct {
@@ -151,6 +152,15 @@ func (c ConsoleEmailService) SendInvitation(email, token string) error {
 	return nil
 }
 
+func (c ConsoleEmailService) SendPasswordReset(email, token string) error {
+	log.Printf("===PASSWORD RESET EMAIL===")
+	log.Printf("To: %s", email)
+	log.Printf("Click here to reset your password: http://localhost:3000/reset-password?token=%s", token)
+	log.Printf("(This link expires in 1 hour)")
+	log.Printf("================================")
+	return nil
+}
+
 func (s SMTPEmailService) SendVerificationCode(email, code string) error {
 	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
 
@@ -214,6 +224,40 @@ func (s SMTPEmailService) SendInvitation(email, token string) error {
 	}
 	//TODO: Log this sort of thing too (in a table).
 	log.Printf("SMTP email sent to %s", email)
+	return nil
+}
+
+func (s SMTPEmailService) SendPasswordReset(email, token string) error {
+	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
+
+	subject := "Password Reset Request"
+	body := fmt.Sprintf(`Hello!
+
+We received a request to reset your password. Click the link below to create a new password:
+
+http://localhost:3000/reset-password?token=%s
+
+This link will expire in 1 hour.
+
+If you didn't request this password reset, please ignore this email.
+
+Kind regards,
+%s`, token, s.FromName)
+
+	message := fmt.Sprintf("From: %s <%s>\r\n"+
+		"To: %s\r\n"+
+		"Subject: %s\r\n"+
+		"\r\n"+
+		"%s\r\n", s.FromName, s.FromEmail, email, subject, body)
+
+	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
+	err := smtp.SendMail(addr, auth, s.FromEmail, []string{email}, []byte(message))
+	if err != nil {
+		log.Printf("SMTP Error: %v", err)
+		return err
+	}
+
+	log.Printf("SMTP password reset email sent to %s", email)
 	return nil
 }
 
@@ -290,5 +334,41 @@ func (m MailgunEmailService) SendInvitation(email, token string) error {
 
 	//TODO: Log this sort of thing too (in a table).
 	log.Printf("Mailgun email sent to %s", email)
+	return nil
+}
+
+func (m MailgunEmailService) SendPasswordReset(email, token string) error {
+	mg := mailgun.NewMailgun(m.Domain, m.APIKey)
+
+	subject := "Password Reset Request"
+	body := fmt.Sprintf(`
+	<h1>Password Reset Request</h1>
+	<p>We received a request to reset your password. Click the link below to create a new password:</p>
+	<a href="http://localhost:3000/reset-password?token=%s">Reset Your Password</a>
+	<p>This link will expire in 1 hour.</p>
+	<p>If you didn't request this password reset, please ignore this email.</p>
+
+	<p>Kind regards</p>
+	<p>%s</p>
+	`, token, m.FromName)
+
+	message := mailgun.NewMessage(
+		fmt.Sprintf("%s <%s>", m.FromName, m.FromEmail),
+		subject,
+		"", // Plain text version, empty for now.
+		email,
+	)
+	message.SetHTML(body)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	_, _, err := mg.Send(ctx, message)
+	if err != nil {
+		log.Printf("Mailgun Error: %v", err)
+		return err
+	}
+
+	log.Printf("Mailgun password reset email sent to %s", email)
 	return nil
 }

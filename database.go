@@ -1,9 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"log"
+	"math/big"
+	"time"
 )
 
 func SetupDatabase(config Config) *gorm.DB {
@@ -13,39 +16,203 @@ func SetupDatabase(config Config) *gorm.DB {
 	}
 	if config.Env == "Development" {
 		log.Println("Automigrating...")
-		db.AutoMigrate(Article{}, VerificationCode{}, User{}, EmailQueue{}, Invitation{})
+		
+		// Auto-migrate all tables
+		db.AutoMigrate(Article{}, VerificationCode{}, PasswordResetToken{}, User{}, EmailQueue{}, Invitation{})
 	}
 
 	return db
 }
 
+
 func (a *App) SeedDatabase() {
+	log.Println("Seeding database...")
+	
+	// Create super admin user if configured and doesn't exist
+	a.CreateSuperAdmin()
+	
 	if a.Config.Env == "Development" {
-		log.Println("Seeding database...")
 		var count int64
 
 		a.DB.Model(&Article{}).Count(&count)
 		if count > 0 {
 			return
 		}
+		
+		// Get the super admin user to use as the author
+		var superAdmin User
+		err := a.DB.Where("is_admin = ?", true).First(&superAdmin).Error
+		if err != nil {
+			log.Printf("No admin user found for seeding articles: %v", err)
+			return
+		}
+		
+		now := time.Now()
+		yesterday := now.AddDate(0, 0, -1)
+		lastWeek := now.AddDate(0, 0, -7)
+		
 		articles := []Article{
 			{
-				Title: "Welcome to My Blog",
-				Slug:  "welcome-to-my-blog",
-				Body:  "This is my first blog post. Welcome to my personal blog where I'll share thoughts and ideas",
+				Title:       "Welcome to My Blog",
+				Slug:        "welcome-to-my-blog",
+				Body:        "Welcome to my personal blog! This is where I'll be sharing my thoughts, experiences, and insights on various topics that interest me. From technology and programming to life experiences and random musings, you'll find a diverse range of content here. I hope you find something valuable and engaging in my posts. Feel free to reach out if you have any questions or want to discuss any of the topics I cover. Thanks for visiting!",
+				AuthorID:    superAdmin.ID,
+				PublishedAt: &lastWeek,
 			},
 			{
-				Title: "Learning Go Programming",
-				Slug:  "learning-go-programming",
-				Body:  "Go is an amazing language for web development. Here are some tips I've learned...",
+				Title:       "Learning Go Programming: A Journey",
+				Slug:        "learning-go-programming",
+				Body:        "Go is an amazing language for web development and backend services. In this article, I'll share some of the key concepts I've learned and tips that have helped me become more productive with Go. From understanding goroutines and channels to building web APIs with frameworks like Fiber, Go offers a great balance of simplicity and power. The language's focus on readability and performance makes it an excellent choice for modern applications. Whether you're building microservices, CLI tools, or web applications, Go provides the tools you need to get the job done efficiently.",
+				AuthorID:    superAdmin.ID,
+				PublishedAt: &yesterday,
 			},
 			{
-				Title: "Building Web Applications",
-				Slug:  "building-web-applications",
-				Body:  "Web development with Go and Fiber is straightforward and powerful.",
+				Title:       "Building Modern Web Applications",
+				Slug:        "building-web-applications",
+				Body:        "Web development has evolved significantly over the years, and today's applications require a thoughtful approach to architecture, user experience, and performance. In this post, I explore the key principles and technologies that make modern web applications successful. From choosing the right backend framework to implementing responsive design and ensuring security best practices, building web applications involves many considerations. I'll share insights from my experience building applications with Go, discussing database design, API development, authentication systems, and deployment strategies that have proven effective in real-world projects.",
+				AuthorID:    superAdmin.ID,
+				PublishedAt: &now,
 			},
 		}
 
 		a.DB.Create(&articles)
 	}
+}
+
+// GenerateSecurePassword creates a secure random password
+func GenerateSecurePassword(length int) string {
+	if length < 12 {
+		length = 12 // Minimum secure length
+	}
+	
+	// Character sets for password generation
+	lowercase := "abcdefghijklmnopqrstuvwxyz"
+	uppercase := "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	numbers := "0123456789"
+	special := "!@#$%^&*"
+	allChars := lowercase + uppercase + numbers + special
+	
+	password := make([]byte, length)
+	
+	// Helper function to get random character from charset
+	getRandomChar := func(charset string) byte {
+		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		return charset[num.Int64()]
+	}
+	
+	// Ensure at least one character from each set
+	password[0] = getRandomChar(lowercase)
+	password[1] = getRandomChar(uppercase)
+	password[2] = getRandomChar(numbers)
+	password[3] = getRandomChar(special)
+	
+	// Fill the rest randomly
+	for i := 4; i < length; i++ {
+		password[i] = getRandomChar(allChars)
+	}
+	
+	// Shuffle the password
+	for i := len(password) - 1; i > 0; i-- {
+		num, _ := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		j := num.Int64()
+		password[i], password[j] = password[j], password[i]
+	}
+	
+	return string(password)
+}
+
+func (a *App) CreateSuperAdmin() {
+	if a.Config.AdminEmail == "" {
+		log.Println("No ADMIN_EMAIL configured, skipping super admin creation")
+		return
+	}
+	
+	// Check if super admin already exists
+	var existingAdmin User
+	err := a.DB.Where("email_address = ? AND is_admin = ?", a.Config.AdminEmail, true).First(&existingAdmin).Error
+	if err == nil {
+		log.Printf("Super admin already exists: %s", existingAdmin.EmailAddress)
+		return
+	}
+	
+	// Check if any user with this email exists (but isn't admin)
+	var existingUser User
+	err = a.DB.Where("email_address = ?", a.Config.AdminEmail).First(&existingUser).Error
+	if err == nil {
+		// User exists but isn't admin, promote them
+		log.Printf("Promoting existing user to super admin: %s", a.Config.AdminEmail)
+		
+		// Ensure they have a password (generate one if they don't)
+		password := ""
+		if existingUser.PasswordHash == "" {
+			password = GenerateSecurePassword(16)
+			passwordHash, err := HashPassword(password)
+			if err != nil {
+				log.Printf("Failed to hash admin password: %v", err)
+				return
+			}
+			existingUser.PasswordHash = passwordHash
+		}
+		
+		// Make them admin
+		existingUser.IsAdmin = true
+		existingUser.Active = true
+		existingUser.EmailVerified = true
+		
+		err = a.DB.Save(&existingUser).Error
+		if err != nil {
+			log.Printf("Failed to promote user to super admin: %v", err)
+			return
+		}
+		
+		// Display credentials if password was generated
+		if password != "" {
+			a.displayAdminCredentials(a.Config.AdminEmail, password)
+		} else {
+			log.Printf("User %s promoted to super admin (existing password retained)", existingUser.EmailAddress)
+		}
+		return
+	}
+	
+	// Generate secure password
+	password := GenerateSecurePassword(16)
+	passwordHash, err := HashPassword(password)
+	if err != nil {
+		log.Printf("Failed to hash admin password: %v", err)
+		return
+	}
+	
+	// Create super admin user
+	adminUser := User{
+		EmailAddress:  a.Config.AdminEmail,
+		PasswordHash:  passwordHash,
+		FullName:      "Super Administrator",
+		Active:        true,
+		IsAdmin:       true,
+		EmailVerified: true, // Admin email is pre-verified
+		RegisteredAt:  &time.Time{},
+	}
+	*adminUser.RegisteredAt = time.Now()
+	
+	err = a.DB.Create(&adminUser).Error
+	if err != nil {
+		log.Printf("Failed to create super admin: %v", err)
+		return
+	}
+	
+	a.displayAdminCredentials(a.Config.AdminEmail, password)
+}
+
+func (a *App) displayAdminCredentials(email, password string) {
+	// Display credentials securely
+	log.Println("=====================================")
+	log.Println("SUPER ADMIN CREATED")
+	log.Println("=====================================")
+	log.Printf("Email:    %s", email)
+	log.Printf("Password: %s", password)
+	log.Println("=====================================")
+	log.Println("IMPORTANT: Save these credentials now!")
+	log.Println("This password will not be shown again.")
+	log.Println("Login with your email address.")
+	log.Println("=====================================")
 }

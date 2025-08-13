@@ -1,3 +1,95 @@
 <div>
-  This is the dashboard page.
+  <h2>Dashboard</h2>
+  
+  <p>Welcome to your dashboard!</p>
+  
+  <div class="dashboard-sections">
+    <div class="section">
+      <h3>Quick Actions</h3>
+      <ul>
+        <li><a href="/user/profile">View Profile</a></li>
+        {% if User and User.IsAdmin %}
+        <li><a href="/admin/invite">Invite New User</a></li>
+        {% endif %}
+      </ul>
+    </div>
+    
+    {% if User and User.IsAdmin %}
+    <div class="section admin-section">
+      <h3>Admin Actions</h3>
+      <ul>
+        <li><a href="/admin/invite">Send User Invitation</a></li>
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  <style>
+    .dashboard-sections {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+    
+    .section {
+      background: #f8f9fa;
+      padding: 1.5rem;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+    
+    .admin-section {
+      background: #e3f2fd;
+      border-color: #bbdefb;
+    }
+    
+    .section h3 {
+      margin-top: 0;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+    
+    .admin-section h3 {
+      color: #1976d2;
+    }
+    
+    .section ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .section li {
+      margin-bottom: 0.5rem;
+    }
+    
+    .section a {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: white;
+      color: #007bff;
+      text-decoration: none;
+      border-radius: 4px;
+      border: 1px solid #dee2e6;
+      transition: all 0.3s ease;
+    }
+    
+    .section a:hover {
+      background: #007bff;
+      color: white;
+      border-color: #007bff;
+    }
+    
+    .admin-section a {
+      background: #2196f3;
+      color: white;
+      border-color: #2196f3;
+    }
+    
+    .admin-section a:hover {
+      background: #1976d2;
+      border-color: #1976d2;
+    }
+  </style>
 </div>

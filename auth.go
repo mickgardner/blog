@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/gofiber/storage/redis/v3"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"math/big"
 	"strconv"
@@ -15,6 +16,15 @@ import (
 type VerificationCode struct {
 	Email     string `gorm:"index"`
 	Code      string `gorm:"size:10"`
+	ExpiresAt time.Time
+	Used      bool `gorm:"default:false"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type PasswordResetToken struct {
+	Email     string `gorm:"index"`
+	Token     string `gorm:"unique;size:64"`
 	ExpiresAt time.Time
 	Used      bool `gorm:"default:false"`
 	CreatedAt time.Time
@@ -32,6 +42,17 @@ func GenerateSecureCode() string {
 	}
 
 	return string(code)
+}
+
+// HashPassword creates a bcrypt hash of the password
+func HashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(hash), err
+}
+
+// CheckPassword verifies a password against its hash
+func CheckPassword(password, hash string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }
 
 func (a *App) CreateVerificationCode(email string) (*VerificationCode, error) {
@@ -70,6 +91,95 @@ func (a *App) VerifyCode(email, inputCode string) (*VerificationCode, error) {
 
 func (a *App) CleanupExpiredCodes() {
 	a.DB.Where("expires_at < ?", time.Now()).Delete(&VerificationCode{})
+}
+
+func (a *App) CleanupExpiredTokens() {
+	a.DB.Where("expires_at < ?", time.Now()).Delete(&PasswordResetToken{})
+}
+
+// GenerateSecureToken creates a secure random token for password reset
+func GenerateSecureToken(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	token := make([]byte, length)
+
+	for i := range token {
+		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		token[i] = charset[num.Int64()]
+	}
+
+	return string(token)
+}
+
+func (a *App) CreatePasswordResetToken(email string) (*PasswordResetToken, error) {
+	// Check if user exists and is active
+	user, err := a.GetUserByEmail(email)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+	if !user.Active {
+		return nil, errors.New("account is disabled")
+	}
+
+	// Invalidate any existing unused tokens for this email
+	a.DB.Model(&PasswordResetToken{}).
+		Where("email = ? AND used = ? AND expires_at > ?", email, false, time.Now()).
+		Update("used", true)
+
+	token := GenerateSecureToken(64)
+
+	resetToken := PasswordResetToken{
+		Email:     email,
+		Token:     token,
+		ExpiresAt: time.Now().Add(1 * time.Hour), // 1 hour expiration
+		Used:      false,
+	}
+
+	err = a.DB.Create(&resetToken).Error
+	return &resetToken, err
+}
+
+func (a *App) ValidatePasswordResetToken(token string) (*PasswordResetToken, error) {
+	var resetToken PasswordResetToken
+
+	err := a.DB.Where("token = ? AND used = ? AND expires_at > ?", token, false, time.Now()).First(&resetToken).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &resetToken, nil
+}
+
+func (a *App) ResetPassword(token, newPassword string) error {
+	// Validate token
+	resetToken, err := a.ValidatePasswordResetToken(token)
+	if err != nil {
+		return errors.New("invalid or expired token")
+	}
+
+	// Get user
+	user, err := a.GetUserByEmail(resetToken.Email)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	// Hash new password
+	passwordHash, err := HashPassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	// Update user password
+	user.PasswordHash = passwordHash
+	err = a.DB.Save(user).Error
+	if err != nil {
+		return err
+	}
+
+	// Mark token as used
+	resetToken.Used = true
+	a.DB.Save(&resetToken)
+
+	return nil
 }
 
 // SESSION MANAGEMENT

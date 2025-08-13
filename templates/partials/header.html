@@ -1,12 +1,164 @@
-<header>
-  <nav>
-    <a href="/">Home</a>
-    <a href="/about">About</a>
-    {% if User %}
-    <a href="/dashboard">Dashboard</a>
-    <a href="/logout">Logout</a>
-    {% else %}
-    <a href="/login">Login</a>
-    {% endif %}
-  </nav>
+<header class="site-header">
+  <div class="header-container">
+    <div class="brand">
+      <a href="/" class="brand-link">My Blog</a>
+    </div>
+    
+    <nav class="main-nav">
+      <ul class="nav-links">
+        <li><a href="/" class="nav-link">Home</a></li>
+        <li><a href="/about" class="nav-link">About</a></li>
+        {% if User %}
+        <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
+        <li><a href="/profile" class="nav-link">Profile</a></li>
+        {% if User.IsAdmin %}
+        <li><a href="/admin/invite" class="nav-link">Invite Users</a></li>
+        {% endif %}
+        <li><a href="/logout" class="nav-link logout-link">Logout</a></li>
+        {% else %}
+        <li><a href="/login" class="nav-link login-link">Login</a></li>
+        {% endif %}
+      </ul>
+    </nav>
+    
+    <button class="mobile-menu-toggle" aria-label="Toggle mobile menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+  </div>
 </header>
+
+<style>
+  .site-header {
+    background: #ffffff;
+    border-bottom: 1px solid #e5e7eb;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+  
+  .header-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: 64px;
+  }
+  
+  .brand {
+    flex-shrink: 0;
+  }
+  
+  .brand-link {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #1f2937;
+    text-decoration: none;
+    transition: color 0.3s ease;
+  }
+  
+  .brand-link:hover {
+    color: #667eea;
+  }
+  
+  .main-nav {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .nav-links {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 32px;
+    align-items: center;
+  }
+  
+  .nav-link {
+    color: #6b7280;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    padding: 8px 16px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  
+  .nav-link:hover {
+    color: #374151;
+    background: #f9fafb;
+  }
+  
+  .nav-link.login-link {
+    background: #667eea;
+    color: white;
+  }
+  
+  .nav-link.login-link:hover {
+    background: #5a67d8;
+    color: white;
+  }
+  
+  .nav-link.logout-link {
+    color: #dc2626;
+  }
+  
+  .nav-link.logout-link:hover {
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+  
+  .mobile-menu-toggle {
+    display: none;
+    flex-direction: column;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    gap: 4px;
+  }
+  
+  .mobile-menu-toggle span {
+    width: 24px;
+    height: 2px;
+    background: #374151;
+    border-radius: 2px;
+    transition: all 0.3s ease;
+  }
+  
+  @media (max-width: 768px) {
+    .header-container {
+      padding: 0 16px;
+    }
+    
+    .main-nav {
+      display: none;
+    }
+    
+    .mobile-menu-toggle {
+      display: flex;
+    }
+    
+    .brand-link {
+      font-size: 1.25rem;
+    }
+  }
+  
+  /* Active page styling */
+  .nav-link.active {
+    color: #667eea;
+    background: #f0f4ff;
+  }
+  
+  .nav-link.active:hover {
+    color: #667eea;
+    background: #e0e7ff;
+  }
+</style>

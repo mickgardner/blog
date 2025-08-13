@@ -20,9 +20,11 @@ type Invitation struct {
 
 type User struct {
 	EmailAddress string `gorm:"unique;not null"`
+	PasswordHash string
 	FullName     string
 	Active       bool
 	IsAdmin      bool
+	EmailVerified bool `gorm:"default:false"`
 	InvitedBy    *uint
 	RegisteredAt *time.Time
 	LastLoginAt  *time.Time
@@ -35,23 +37,59 @@ func (a *App) GetUserByEmail(email string) (*User, error) {
 	return &user, err
 }
 
-func (a *App) GetOrCreateUser(email, fullName string) (*User, error) {
-	// Check if user exists.
-	user, err := a.GetUserByEmail(email)
+
+// ValidatePassword checks if password meets requirements
+func (u *User) ValidatePassword(password string) error {
+	return CheckPassword(password, u.PasswordHash)
+}
+
+func (a *App) CreateUser(email, password, fullName string) (*User, error) {
+	// Check if user exists by email
+	_, err := a.GetUserByEmail(email)
 	if err == nil {
-		// User exists.
-		return user, nil
+		return nil, errors.New("user with this email already exists")
 	}
 
-	// Create a new user.
+	// Hash password
+	passwordHash, err := HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create new user
 	newUser := User{
-		EmailAddress: email,
-		FullName:     fullName,
-		Active:       true,
+		EmailAddress:  email,
+		PasswordHash:  passwordHash,
+		FullName:      fullName,
+		Active:        true,
+		EmailVerified: false,
 	}
 
 	err = a.DB.Create(&newUser).Error
 	return &newUser, err
+}
+
+func (a *App) AuthenticateUser(email, password string) (*User, error) {
+	user, err := a.GetUserByEmail(email)
+	if err != nil {
+		return nil, errors.New("invalid email or password")
+	}
+
+	if !user.Active {
+		return nil, errors.New("account is disabled")
+	}
+
+	// Handle case where user doesn't have a password yet (migration scenario)
+	if user.PasswordHash == "" {
+		return nil, errors.New("account setup incomplete - please contact administrator")
+	}
+
+	err = user.ValidatePassword(password)
+	if err != nil {
+		return nil, errors.New("invalid email or password")
+	}
+
+	return user, nil
 }
 
 func (a *App) CreateInvitation(adminUserID uint, email string) (*Invitation, error) {
@@ -89,21 +127,29 @@ func (a *App) ValidateInvitationToken(token string) (*Invitation, error) {
 	return &invitation, err
 }
 
-func (a *App) CompleteRegistration(token, email, fullName string) (*User, error) {
+func (a *App) CompleteRegistration(token, email, password, fullName string) (*User, error) {
 	// Validate invitation
 	invitation, err := a.ValidateInvitationToken(token)
 	if err != nil || invitation.Email != email {
 		return nil, errors.New("invalid invitation")
 	}
 
+	// Hash password
+	passwordHash, err := HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create user
 	user := User{
-		EmailAddress: email,
-		FullName:     fullName,
-		Active:       true,
-		IsAdmin:      false,
-		InvitedBy:    &invitation.InvitedBy,
-		RegisteredAt: &time.Time{},
+		EmailAddress:  email,
+		PasswordHash:  passwordHash,
+		FullName:      fullName,
+		Active:        true,
+		IsAdmin:       false,
+		EmailVerified: false,
+		InvitedBy:     &invitation.InvitedBy,
+		RegisteredAt:  &time.Time{},
 	}
 	*user.RegisteredAt = time.Now()
 
@@ -131,4 +177,20 @@ func generateSecureToken(length int) string {
 	}
 
 	return string(token)
+}
+
+// GetFormattedRegistrationDate returns a nicely formatted registration date
+func (user *User) GetFormattedRegistrationDate() string {
+	if user.RegisteredAt == nil {
+		return "Unknown"
+	}
+	return user.RegisteredAt.Format("January 2006")
+}
+
+// GetFormattedLastLogin returns a nicely formatted last login date
+func (user *User) GetFormattedLastLogin() string {
+	if user.LastLoginAt == nil {
+		return "Never"
+	}
+	return user.LastLoginAt.Format("Jan 2, 2006")
 }

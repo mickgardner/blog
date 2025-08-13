@@ -1,0 +1,34 @@
+<div>
+  <h2>Complete Registration</h2>
+
+  {% if Error %}
+  <div class="error">{{ Error }}</div>
+  {% endif %}
+
+  <p>Complete your account registration by filling out the form below.</p>
+  <p><strong>Email:</strong> {{ Email }}</p>
+
+  <form action="/register" method="POST">
+    <input type="hidden" name="_token" value="{{ csrf_token }}">
+    <input type="hidden" name="token" value="{{ Token }}">
+    <input type="hidden" name="email" value="{{ Email }}">
+    
+    <div>
+      <label for="full_name">Full Name:</label>
+      <input type="text" id="full_name" name="full_name" value="{{ FullName }}" placeholder="Enter your full name" required>
+    </div>
+    
+    <div>
+      <label for="password">Password:</label>
+      <input type="password" id="password" name="password" placeholder="Create a password" required>
+      <small>Password must be at least 8 characters long and contain at least one letter and one number.</small>
+    </div>
+    
+    <div>
+      <label for="confirm_password">Confirm Password:</label>
+      <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm your password" required>
+    </div>
+    
+    <button type="submit">Complete Registration</button>
+  </form>
+</div>
