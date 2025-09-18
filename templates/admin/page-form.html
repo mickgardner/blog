@@ -1,0 +1,1162 @@
+<div class="page-form-page">
+  <header class="form-header">
+    <nav class="breadcrumb">
+      <a href="/">Home</a> <span>›</span>
+      <a href="/dashboard">Dashboard</a> <span>›</span>
+      <a href="/admin/pages">Pages</a> <span>›</span>
+      <span>{{ Page.ID|yesno:"Edit,New" }} Page</span>
+    </nav>
+
+    <div class="header-content">
+      <h1 class="page-title">
+        {% if Page.ID %}
+        Edit Page
+        {% else %}
+        Create New Page
+        {% endif %}
+      </h1>
+    </div>
+  </header>
+
+  <main class="form-content">
+    {% if Success %}
+    <div class="alert alert-success">
+      {{ Success }}
+    </div>
+    {% endif %}
+
+    {% if Error %}
+    <div class="alert alert-error">
+      {{ Error }}
+    </div>
+    {% endif %}
+
+    <form action="/admin/pages/{% if Page.ID %}{{ Page.ID }}/update{% else %}create{% endif %}" method="POST" class="page-form">
+      <input type="hidden" name="_token" value="{{ csrf_token }}">
+
+      <div class="form-sections">
+        <section class="form-section">
+          <h2 class="section-title">Page Details</h2>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="title" class="form-label">Title *</label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                value="{{ Page.Title }}"
+                class="form-input"
+                required
+                placeholder="Enter page title"
+              >
+              <p class="form-help">This will be displayed as the page headline</p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="slug" class="form-label">URL Slug *</label>
+              <div class="slug-input-group">
+                <span class="slug-prefix">/</span>
+                <input
+                  type="text"
+                  id="slug"
+                  name="slug"
+                  value="{{ Page.Slug }}"
+                  class="form-input slug-input"
+                  required
+                  placeholder="page-url-slug"
+                  pattern="[a-z0-9-]+"
+                >
+              </div>
+              <p class="form-help">Lowercase letters, numbers, and hyphens only. Must be unique and cannot conflict with existing routes.</p>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="body" class="form-label">Content *
+                <span class="markdown-badge">Markdown Supported</span>
+              </label>
+
+              <div class="markdown-editor">
+                <div class="markdown-toolbar">
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('**', '**')" title="Bold">
+                    <strong>B</strong>
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('*', '*')" title="Italic">
+                    <em>I</em>
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('~~', '~~')" title="Strikethrough">
+                    <s>S</s>
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('# ', '')" title="Heading 1">
+                    H1
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('## ', '')" title="Heading 2">
+                    H2
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('### ', '')" title="Heading 3">
+                    H3
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('- ', '')" title="Bullet List">
+                    • List
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('1. ', '')" title="Numbered List">
+                    1. List
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('> ', '')" title="Quote">
+                    Quote
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('`', '`')" title="Inline Code">
+                    Code
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('```\n', '\n```')" title="Code Block">
+                    Block
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('[Link Text](', ')')" title="Link">
+                    Link
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="showImageUpload()" title="Upload Image">
+                    📷 Upload
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn preview-toggle" onclick="togglePreview()" title="Toggle Preview">
+                    👁️ Preview
+                  </button>
+                  <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(this)">
+                </div>
+
+                <div class="editor-container">
+                  <textarea
+                    id="body"
+                    name="body"
+                    class="form-textarea markdown-textarea"
+                    required
+                    rows="15"
+                    placeholder="Write your page content here using Markdown..."
+                  >{{ Page.Body }}</textarea>
+
+                  <div id="preview-pane" class="preview-pane" style="display: none;">
+                    <div class="preview-content" id="preview-content">
+                      <p class="preview-placeholder">Preview will appear here...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="markdown-help">
+                <p class="form-help">
+                  Write your page content using <strong>Markdown</strong>.
+                  <a href="#" onclick="toggleMarkdownGuide(); return false;" class="markdown-guide-toggle">
+                    Show Markdown Guide
+                  </a>
+                </p>
+
+                <div id="markdown-guide" class="markdown-guide" style="display: none;">
+                  <h4>Markdown Quick Reference</h4>
+                  <div class="guide-grid">
+                    <div class="guide-item">
+                      <strong>Headers:</strong>
+                      <code># H1, ## H2, ### H3</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Emphasis:</strong>
+                      <code>**bold**, *italic*, ~~strikethrough~~</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Lists:</strong>
+                      <code>- item or 1. item</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Links:</strong>
+                      <code>[text](url)</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Images:</strong>
+                      <code>![alt](image-url)</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Code:</strong>
+                      <code>`inline` or ```block```</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Quotes:</strong>
+                      <code>> quoted text</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Tables:</strong>
+                      <code>| Col1 | Col2 |<br>|------|------|<br>| Data | Data |</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <h2 class="section-title">Status</h2>
+
+          {% if Page.ID %}
+          <div class="form-row">
+            <div class="page-meta">
+              <div class="meta-item">
+                <span class="meta-label">Created:</span>
+                <span class="meta-value">{{ Page.GetFormattedCreatedAt }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Last Modified:</span>
+                <span class="meta-value">{{ Page.GetFormattedUpdatedAt }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Status:</span>
+                <span class="meta-value">
+                  {% if Page.Active %}
+                  <span class="status-badge active">Active</span>
+                  {% else %}
+                  <span class="status-badge inactive">Inactive</span>
+                  {% endif %}
+                </span>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </section>
+      </div>
+
+      <div class="form-actions">
+        <div class="action-group">
+          <button type="submit" class="btn btn-primary">
+            {% if Page.ID %}
+            Update Page
+            {% else %}
+            Create Page
+            {% endif %}
+          </button>
+
+          {% if Page.ID %}
+          <a href="/{{ Page.Slug }}" class="btn btn-secondary" target="_blank">
+            View Page
+          </a>
+          {% endif %}
+
+          <a href="/admin/pages" class="btn btn-outline">
+            Cancel
+          </a>
+        </div>
+
+        {% if Page.ID %}
+        <div class="danger-actions">
+          <form action="/admin/pages/{{ Page.ID }}/delete" method="POST" class="inline-form" onsubmit="return confirm('Are you sure you want to delete this page? This action cannot be undone.')">
+            <input type="hidden" name="_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-danger">
+              Delete Page
+            </button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </main>
+</div>
+
+<script>
+  // Auto-generate slug from title
+  document.getElementById('title').addEventListener('input', function() {
+    const title = this.value;
+    const slug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
+
+    const slugInput = document.getElementById('slug');
+    if (slugInput.value === '' || slugInput.getAttribute('data-auto-generated') === 'true') {
+      slugInput.value = slug;
+      slugInput.setAttribute('data-auto-generated', 'true');
+    }
+  });
+
+  // Mark slug as manually edited
+  document.getElementById('slug').addEventListener('input', function() {
+    this.setAttribute('data-auto-generated', 'false');
+  });
+
+  // Markdown editor functions (same as article form)
+  function insertMarkdown(before, after) {
+    const textarea = document.getElementById('body');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+
+    const replacement = before + selectedText + after;
+
+    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+
+    const newCursorPos = start + before.length + selectedText.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+  }
+
+  function toggleMarkdownGuide() {
+    const guide = document.getElementById('markdown-guide');
+    const toggle = document.querySelector('.markdown-guide-toggle');
+
+    if (guide.style.display === 'none') {
+      guide.style.display = 'block';
+      toggle.textContent = 'Hide Markdown Guide';
+    } else {
+      guide.style.display = 'none';
+      toggle.textContent = 'Show Markdown Guide';
+    }
+  }
+
+  // Keyboard shortcuts for common markdown formatting
+  document.getElementById('body').addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+      switch(e.key) {
+        case 'b':
+          e.preventDefault();
+          insertMarkdown('**', '**');
+          break;
+        case 'i':
+          e.preventDefault();
+          insertMarkdown('*', '*');
+          break;
+        case 'k':
+          e.preventDefault();
+          insertMarkdown('[', '](url)');
+          break;
+      }
+    }
+  });
+
+  // Image upload functions
+  function showImageUpload() {
+    document.getElementById('image-upload').click();
+  }
+
+  function handleImageUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      return;
+    }
+
+    const uploadBtn = document.querySelector('[onclick="showImageUpload()"]');
+    const originalText = uploadBtn.innerHTML;
+    uploadBtn.innerHTML = '⏳ Uploading...';
+    uploadBtn.disabled = true;
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    fetch('/admin/upload-image', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        const altText = file.name.replace(/\.[^/.]+$/, "");
+        const markdownText = `![${altText}](${data.url})`;
+        insertMarkdownText(markdownText);
+        showUploadMessage('Image uploaded successfully!', 'success');
+      } else {
+        showUploadMessage(data.error || 'Upload failed', 'error');
+      }
+    })
+    .catch(error => {
+      console.error('Upload error:', error);
+      showUploadMessage('Upload failed. Please try again.', 'error');
+    })
+    .finally(() => {
+      uploadBtn.innerHTML = originalText;
+      uploadBtn.disabled = false;
+      input.value = '';
+    });
+  }
+
+  function insertMarkdownText(text) {
+    const textarea = document.getElementById('body');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(end);
+
+    const newCursorPos = start + text.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+  }
+
+  function showUploadMessage(message, type) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `upload-message upload-${type}`;
+    messageDiv.textContent = message;
+
+    const toolbar = document.querySelector('.markdown-toolbar');
+    toolbar.parentNode.insertBefore(messageDiv, toolbar.nextSibling);
+
+    setTimeout(() => {
+      if (messageDiv.parentNode) {
+        messageDiv.parentNode.removeChild(messageDiv);
+      }
+    }, 3000);
+  }
+
+  // Preview functionality
+  let previewMode = false;
+  let previewUpdateTimeout;
+
+  function togglePreview() {
+    const previewPane = document.getElementById('preview-pane');
+    const textarea = document.getElementById('body');
+    const container = document.querySelector('.editor-container');
+    const previewBtn = document.querySelector('.preview-toggle');
+
+    previewMode = !previewMode;
+
+    if (previewMode) {
+      previewPane.style.display = 'block';
+      container.classList.add('split-view');
+      previewBtn.innerHTML = '📝 Edit';
+      previewBtn.title = 'Hide Preview';
+
+      updatePreview();
+      textarea.addEventListener('input', debouncePreviewUpdate);
+    } else {
+      previewPane.style.display = 'none';
+      container.classList.remove('split-view');
+      previewBtn.innerHTML = '👁️ Preview';
+      previewBtn.title = 'Toggle Preview';
+
+      textarea.removeEventListener('input', debouncePreviewUpdate);
+    }
+  }
+
+  function debouncePreviewUpdate() {
+    clearTimeout(previewUpdateTimeout);
+    previewUpdateTimeout = setTimeout(updatePreview, 300);
+  }
+
+  function updatePreview() {
+    const textarea = document.getElementById('body');
+    const previewContent = document.getElementById('preview-content');
+    const markdownText = textarea.value;
+
+    if (!markdownText.trim()) {
+      previewContent.innerHTML = '<p class="preview-placeholder">Preview will appear here...</p>';
+      return;
+    }
+
+    const htmlContent = convertMarkdownToHTML(markdownText);
+    previewContent.innerHTML = htmlContent;
+  }
+
+  // Basic client-side markdown to HTML conversion
+  function convertMarkdownToHTML(markdown) {
+    let html = markdown;
+
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Bold
+    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+    html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>');
+
+    // Italic
+    html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+    html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+
+    // Strikethrough
+    html = html.replace(/~~(.*?)~~/gim, '<del>$1</del>');
+
+    // Code blocks
+    html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
+
+    // Inline code
+    html = html.replace(/`(.*?)`/gim, '<code>$1</code>');
+
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>');
+
+    // Images
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" style="max-width: 100%; height: auto;">');
+
+    // Blockquotes
+    html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+    // Lists
+    html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^\- (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^\+ (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^(\d+)\. (.*$)/gim, '<li>$1. $2</li>');
+
+    // Wrap consecutive <li> elements in <ul>
+    html = html.replace(/(<li>.*<\/li>)/gims, function(match) {
+      return '<ul>' + match.replace(/<\/li>\s*<li>/gim, '</li><li>') + '</ul>';
+    });
+
+    // Line breaks
+    html = html.replace(/\n\n/gim, '</p><p>');
+    html = html.replace(/\n/gim, '<br>');
+
+    // Wrap in paragraphs
+    if (html && !html.startsWith('<')) {
+      html = '<p>' + html + '</p>';
+    }
+
+    return html;
+  }
+</script>
+
+<style>
+  /* Copy all styles from article-form.html */
+  .page-form-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  .form-header {
+    padding: 20px 0 40px;
+  }
+
+  .breadcrumb {
+    padding: 20px 0;
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-bottom: 20px;
+  }
+
+  .breadcrumb a {
+    color: #667eea;
+    text-decoration: none;
+    transition: color 0.3s ease;
+  }
+
+  .breadcrumb a:hover {
+    color: #5a67d8;
+  }
+
+  .breadcrumb span {
+    margin: 0 8px;
+  }
+
+  .header-content {
+    text-align: center;
+    padding: 40px 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    margin-bottom: 40px;
+  }
+
+  .page-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+
+  .alert {
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-weight: 500;
+  }
+
+  .alert-success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .alert-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .page-form {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+
+  .form-sections {
+    padding: 32px;
+  }
+
+  .form-section {
+    margin-bottom: 40px;
+  }
+
+  .form-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 24px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f3f4f6;
+  }
+
+  .form-row {
+    margin-bottom: 24px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-label {
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+  }
+
+  .form-input {
+    padding: 12px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .form-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .slug-input-group {
+    display: flex;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .slug-input-group:focus-within {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .slug-prefix {
+    padding: 12px 16px;
+    background: #f9fafb;
+    color: #6b7280;
+    border-right: 1px solid #e5e7eb;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+  }
+
+  .slug-input {
+    border: none;
+    border-radius: 0;
+    flex: 1;
+    font-family: 'Monaco', 'Menlo', monospace;
+  }
+
+  .slug-input:focus {
+    box-shadow: none;
+    border-color: transparent;
+  }
+
+  .form-textarea {
+    padding: 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 300px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .form-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .form-help {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 8px 0 0;
+  }
+
+  .markdown-badge {
+    background: #10b981;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+  }
+
+  .markdown-editor {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .markdown-editor:focus-within {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .markdown-toolbar {
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #374151;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 32px;
+    justify-content: center;
+  }
+
+  .toolbar-btn:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+  }
+
+  .toolbar-btn:active {
+    background: #d1d5db;
+  }
+
+  .toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: #d1d5db;
+    margin: 0 4px;
+  }
+
+  .markdown-textarea {
+    border: none;
+    border-radius: 0;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.9rem;
+  }
+
+  .markdown-textarea:focus {
+    box-shadow: none;
+    border-color: transparent;
+  }
+
+  .markdown-help {
+    margin-top: 12px;
+  }
+
+  .markdown-guide-toggle {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    margin-left: 8px;
+  }
+
+  .markdown-guide-toggle:hover {
+    color: #5a67d8;
+    text-decoration: underline;
+  }
+
+  .markdown-guide {
+    margin-top: 16px;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  .markdown-guide h4 {
+    margin: 0 0 12px;
+    color: #374151;
+    font-size: 1rem;
+  }
+
+  .guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .guide-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .guide-item strong {
+    color: #1f2937;
+    font-size: 0.9rem;
+  }
+
+  .guide-item code {
+    background: #e2e8f0;
+    color: #475569;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .upload-message {
+    padding: 8px 12px;
+    margin: 8px 0;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .upload-success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .upload-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .editor-container {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .editor-container.split-view {
+    flex-direction: row;
+    gap: 16px;
+  }
+
+  .editor-container.split-view .markdown-textarea {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .preview-pane {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .preview-content {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #374151;
+  }
+
+  .preview-placeholder {
+    color: #9ca3af;
+    font-style: italic;
+    text-align: center;
+    margin: 40px 0;
+  }
+
+  /* Preview content styling */
+  .preview-content h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 16px;
+    line-height: 1.2;
+  }
+
+  .preview-content h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 24px 0 12px;
+    line-height: 1.3;
+  }
+
+  .preview-content h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 20px 0 10px;
+    line-height: 1.3;
+  }
+
+  .preview-content p {
+    margin: 0 0 16px;
+  }
+
+  .preview-content p:last-child {
+    margin-bottom: 0;
+  }
+
+  .preview-content ul, .preview-content ol {
+    margin: 0 0 16px;
+    padding-left: 20px;
+  }
+
+  .preview-content li {
+    margin-bottom: 4px;
+  }
+
+  .preview-content blockquote {
+    border-left: 4px solid #667eea;
+    padding-left: 16px;
+    margin: 16px 0;
+    font-style: italic;
+    color: #4b5563;
+  }
+
+  .preview-content code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9em;
+    color: #e53e3e;
+  }
+
+  .preview-content pre {
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 16px 0;
+  }
+
+  .preview-content pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  .preview-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 8px 0;
+  }
+
+  .preview-content a {
+    color: #667eea;
+    text-decoration: none;
+  }
+
+  .preview-content a:hover {
+    color: #5a67d8;
+    text-decoration: underline;
+  }
+
+  .page-meta {
+    background: #f9fafb;
+    padding: 20px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .meta-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .meta-label {
+    font-weight: 500;
+    color: #6b7280;
+  }
+
+  .meta-value {
+    color: #374151;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-badge.active {
+    background: #ecfdf5;
+    color: #065f46;
+  }
+
+  .status-badge.inactive {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .form-actions {
+    padding: 24px 32px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .action-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 1rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-primary {
+    background: #667eea;
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #5a67d8;
+  }
+
+  .btn-secondary {
+    background: #6b7280;
+    color: white;
+  }
+
+  .btn-secondary:hover {
+    background: #4b5563;
+  }
+
+  .btn-outline {
+    background: transparent;
+    color: #6b7280;
+    border: 1px solid #d1d5db;
+  }
+
+  .btn-outline:hover {
+    background: #f9fafb;
+    color: #374151;
+  }
+
+  .btn-danger {
+    background: #ef4444;
+    color: white;
+  }
+
+  .btn-danger:hover {
+    background: #dc2626;
+  }
+
+  .inline-form {
+    display: inline;
+  }
+
+  @media (max-width: 768px) {
+    .header-content {
+      padding: 24px 20px;
+    }
+
+    .page-title {
+      font-size: 1.75rem;
+    }
+
+    .form-sections {
+      padding: 20px;
+    }
+
+    .form-actions {
+      padding: 20px;
+      flex-direction: column;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .action-group {
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .btn {
+      text-align: center;
+    }
+
+    .slug-input-group {
+      flex-direction: column;
+    }
+
+    .slug-prefix {
+      border-right: none;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .editor-container.split-view {
+      flex-direction: column;
+    }
+
+    .preview-content {
+      max-height: 300px;
+    }
+  }
+</style>

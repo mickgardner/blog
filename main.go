@@ -58,7 +58,6 @@ func (a *App) DefineRoutes() {
 	a.Router.Get("/", a.IndexHandler)
 	a.Router.Get("/article/:slug", a.ArticleHandler)
 	a.Router.Get("/author/:id", a.AuthorHandler)
-	a.Router.Get("/about", a.AboutHandler)
 
 	// Authentication routes (with rate limiting)
 	a.Router.Get("/login", a.LoginHandler)
@@ -96,10 +95,23 @@ func (a *App) DefineRoutes() {
 	a.Router.Post("/admin/articles/:id/unpublish", a.RequireAuth, a.RequireAdmin, a.UnpublishArticleHandler)
 	a.Router.Post("/admin/articles/:id/delete", a.RequireAuth, a.RequireAdmin, a.DeleteArticleHandler)
 	
+	// Admin - Page management
+	a.Router.Get("/admin/pages", a.RequireAuth, a.RequireAdmin, a.PageManagementHandler)
+	a.Router.Get("/admin/pages/new", a.RequireAuth, a.RequireAdmin, a.NewPageHandler)
+	a.Router.Post("/admin/pages/create", a.RequireAuth, a.RequireAdmin, a.CreatePageHandler)
+	a.Router.Get("/admin/pages/:id/edit", a.RequireAuth, a.RequireAdmin, a.EditPageHandler)
+	a.Router.Post("/admin/pages/:id/update", a.RequireAuth, a.RequireAdmin, a.UpdatePageHandler)
+	a.Router.Post("/admin/pages/:id/activate", a.RequireAuth, a.RequireAdmin, a.ActivatePageHandler)
+	a.Router.Post("/admin/pages/:id/deactivate", a.RequireAuth, a.RequireAdmin, a.DeactivatePageHandler)
+	a.Router.Post("/admin/pages/:id/delete", a.RequireAuth, a.RequireAdmin, a.DeletePageHandler)
+
 	// Admin - User management
 	a.Router.Get("/admin/invite", a.RequireAuth, a.RequireAdmin, a.InviteFormHandler)
 	a.Router.Post("/admin/invite", a.RequireAuth, a.RequireAdmin, a.SendInviteHandler)
 
 	// Image upload for Markdown editor
 	a.Router.Post("/admin/upload-image", a.RequireAuth, a.RequireAdmin, a.UploadImageHandler)
+
+	// Dynamic page routes (must be last to avoid conflicts)
+	a.Router.Get("/:slug", a.PageHandler)
 }

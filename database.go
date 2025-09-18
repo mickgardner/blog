@@ -16,7 +16,7 @@ func SetupDatabase(config Config) *gorm.DB {
 		log.Println("Automigrating...")
 		
 		// Auto-migrate all tables
-		db.AutoMigrate(Article{}, VerificationCode{}, PasswordResetToken{}, User{}, EmailQueue{}, Invitation{})
+		db.AutoMigrate(Article{}, Page{}, VerificationCode{}, PasswordResetToken{}, User{}, EmailQueue{}, Invitation{})
 	}
 
 	return db

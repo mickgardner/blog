@@ -78,12 +78,6 @@ func (a *App) ArticleHandler(c *fiber.Ctx) error {
 	}), "layouts/base")
 }
 
-func (a *App) AboutHandler(c *fiber.Ctx) error {
-	return c.Render("pages/about", a.GetTemplateData(c, fiber.Map{
-		"Title":   "About Page",
-		"Message": "About Page",
-	}), "layouts/base")
-}
 
 // Show login form
 func (a *App) LoginHandler(c *fiber.Ctx) error {
@@ -1126,6 +1120,289 @@ func saveUploadedFile(file *multipart.FileHeader, dst string) error {
 
 	_, err = io.Copy(out, src)
 	return err
+}
+
+// PAGE HANDLERS
+
+// Display page by slug
+func (a *App) PageHandler(c *fiber.Ctx) error {
+	slug := c.Params("slug")
+	page, err := a.GetPage(slug)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"slug": slug,
+			"error": err.Error(),
+		}).Warn("Page not found")
+		return fiber.ErrNotFound
+	}
+
+	// Convert markdown body to HTML
+	renderedBody, err := MarkdownToHTML(page.Body)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"slug": slug,
+			"error": err.Error(),
+		}).Error("Failed to render markdown")
+		// Fallback to raw body if markdown rendering fails
+		renderedBody = template.HTML(page.Body)
+	}
+
+	// Create a template-friendly version with rendered HTML
+	templatePage := struct {
+		*Page
+		RenderedBody template.HTML
+	}{
+		Page:         page,
+		RenderedBody: renderedBody,
+	}
+
+	return c.Render("page", a.GetTemplateData(c, fiber.Map{
+		"Title":   page.Title,
+		"Message": "Page",
+		"Page":    templatePage,
+	}), "layouts/base")
+}
+
+// Show pages management list
+func (a *App) PageManagementHandler(c *fiber.Ctx) error {
+	pages, err := a.GetAllPages()
+	if err != nil {
+		LogHTTP().WithError(err).Error("Failed to fetch pages")
+		return fiber.ErrInternalServerError
+	}
+
+	return c.Render("admin/pages", a.GetTemplateData(c, fiber.Map{
+		"Title":     "Page Management",
+		"PagesPage": true,
+		"Pages":     pages,
+		"Success":   c.Query("success"),
+		"Error":     c.Query("error"),
+	}), "layouts/admin")
+}
+
+// Show new page form
+func (a *App) NewPageHandler(c *fiber.Ctx) error {
+	return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+		"Title":       "New Page",
+		"NewPagePage": true,
+		"Page":        Page{}, // Empty page for new form
+	}), "layouts/admin")
+}
+
+// Create new page
+func (a *App) CreatePageHandler(c *fiber.Ctx) error {
+	user, err := a.GetCurrentUser(c)
+	if err != nil {
+		return c.Redirect("/login")
+	}
+
+	title := strings.TrimSpace(c.FormValue("title"))
+	slug := strings.TrimSpace(c.FormValue("slug"))
+	body := strings.TrimSpace(c.FormValue("body"))
+
+	// Validate required fields
+	if title == "" || slug == "" || body == "" {
+		return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+			"Title":       "New Page",
+			"NewPagePage": true,
+			"Page": Page{
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": "All fields are required",
+		}), "layouts/admin")
+	}
+
+	// Additional validation
+	if !isValidPageSlug(slug) {
+		return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+			"Title":       "New Page",
+			"NewPagePage": true,
+			"Page": Page{
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": "Invalid slug. Use only lowercase letters, numbers, and hyphens. Slug cannot conflict with existing routes.",
+		}), "layouts/admin")
+	}
+
+	// Create the page
+	page, err := a.CreatePage(title, slug, body, user.ID)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"user":  SanitizeEmail(user.EmailAddress),
+			"title": title,
+			"slug":  slug,
+			"error": err.Error(),
+		}).Error("Failed to create page")
+
+		return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+			"Title":       "New Page",
+			"NewPagePage": true,
+			"Page": Page{
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": err.Error(),
+		}), "layouts/admin")
+	}
+
+	LogHTTP().WithFields(map[string]interface{}{
+		"user":    SanitizeEmail(user.EmailAddress),
+		"page_id": page.ID,
+		"title":   page.Title,
+		"slug":    page.Slug,
+	}).Info("Page created successfully")
+
+	return c.Redirect("/admin/pages?success=Page created successfully!")
+}
+
+// Show edit page form
+func (a *App) EditPageHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	page, err := a.GetPageByID(id)
+	if err != nil {
+		log.Printf("Page not found: %v", err)
+		return fiber.ErrNotFound
+	}
+
+	return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+		"Title":     "Edit Page",
+		"PagesPage": true,
+		"Page":      page,
+	}), "layouts/admin")
+}
+
+// Update existing page
+func (a *App) UpdatePageHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	pageID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	title := strings.TrimSpace(c.FormValue("title"))
+	slug := strings.TrimSpace(c.FormValue("slug"))
+	body := strings.TrimSpace(c.FormValue("body"))
+
+	// Get original page for form repopulation on error
+	originalPage, err := a.GetPageByID(id)
+	if err != nil {
+		return fiber.ErrNotFound
+	}
+
+	// Validate required fields
+	if title == "" || slug == "" || body == "" {
+		return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Page",
+			"Page": Page{
+				Model: originalPage.Model,
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": "All fields are required",
+		}), "layouts/admin")
+	}
+
+	// Additional validation
+	if !isValidPageSlug(slug) {
+		return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Page",
+			"Page": Page{
+				Model: originalPage.Model,
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": "Invalid slug. Use only lowercase letters, numbers, and hyphens. Slug cannot conflict with existing routes.",
+		}), "layouts/admin")
+	}
+
+	// Update the page
+	err = a.UpdatePage(uint(pageID), title, slug, body)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"page_id": pageID,
+			"error":   err.Error(),
+		}).Error("Failed to update page")
+
+		return c.Render("admin/page-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Page",
+			"Page": Page{
+				Model: originalPage.Model,
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": err.Error(),
+		}), "layouts/admin")
+	}
+
+	LogHTTP().WithFields(map[string]interface{}{
+		"page_id": pageID,
+		"title":   title,
+		"slug":    slug,
+	}).Info("Page updated successfully")
+
+	return c.Redirect("/admin/pages?success=Page updated successfully!")
+}
+
+// Activate page
+func (a *App) ActivatePageHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	pageID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	err = a.ActivatePage(uint(pageID))
+	if err != nil {
+		log.Printf("Failed to activate page: %v", err)
+		return c.Redirect("/admin/pages?error=" + "Failed to activate page")
+	}
+
+	log.Printf("Page activated: ID %d", pageID)
+	return c.Redirect("/admin/pages?success=" + "Page activated successfully!")
+}
+
+// Deactivate page
+func (a *App) DeactivatePageHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	pageID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	err = a.DeactivatePage(uint(pageID))
+	if err != nil {
+		log.Printf("Failed to deactivate page: %v", err)
+		return c.Redirect("/admin/pages?error=" + "Failed to deactivate page")
+	}
+
+	log.Printf("Page deactivated: ID %d", pageID)
+	return c.Redirect("/admin/pages?success=" + "Page deactivated successfully!")
+}
+
+// Delete page
+func (a *App) DeletePageHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	pageID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	err = a.DeletePage(uint(pageID))
+	if err != nil {
+		log.Printf("Failed to delete page: %v", err)
+		return c.Redirect("/admin/pages?error=" + "Failed to delete page")
+	}
+
+	log.Printf("Page deleted: ID %d", pageID)
+	return c.Redirect("/admin/pages?success=" + "Page deleted successfully!")
 }
 
 // isValidSlug is now in validation.go

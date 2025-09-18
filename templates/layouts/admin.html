@@ -39,10 +39,22 @@
                 <span class="nav-text">Articles</span>
               </a>
             </li>
-            <li class="nav-item">
+            <li class="nav-item nav-sub-item">
               <a href="/admin/articles/new" class="nav-link {{ NewArticlePage|yesno:'active,' }}">
                 <span class="nav-icon">➕</span>
-                <span class="nav-text">Add New</span>
+                <span class="nav-text">Add Article</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a href="/admin/pages" class="nav-link {{ PagesPage|yesno:'active,' }}">
+                <span class="nav-icon">📄</span>
+                <span class="nav-text">Pages</span>
+              </a>
+            </li>
+            <li class="nav-item nav-sub-item">
+              <a href="/admin/pages/new" class="nav-link {{ NewPagePage|yesno:'active,' }}">
+                <span class="nav-icon">➕</span>
+                <span class="nav-text">Add Page</span>
               </a>
             </li>
           </ul>
@@ -242,6 +254,23 @@
   .nav-text {
     font-size: 0.9rem;
     font-weight: 400;
+  }
+
+  /* Subordinate navigation items */
+  .nav-sub-item .nav-link {
+    padding-left: 40px;
+    font-size: 0.85rem;
+  }
+
+  .nav-sub-item .nav-icon {
+    width: 16px;
+    font-size: 0.85rem;
+    margin-right: 10px;
+  }
+
+  .nav-sub-item .nav-text {
+    font-size: 0.85rem;
+    opacity: 0.9;
   }
   
   /* Sidebar Footer */
