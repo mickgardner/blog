@@ -1,10 +1,8 @@
 package main
 
 import (
-	"crypto/rand"
 	"errors"
 	"gorm.io/gorm"
-	"math/big"
 	"time"
 )
 
@@ -107,7 +105,7 @@ func (a *App) CreateInvitation(adminUserID uint, email string) (*Invitation, err
 	}
 
 	// Generate secure token
-	token := generateSecureToken(64)
+	token := GenerateSecureToken(64)
 
 	invitation := Invitation{
 		Email:     email,
@@ -128,56 +126,66 @@ func (a *App) ValidateInvitationToken(token string) (*Invitation, error) {
 }
 
 func (a *App) CompleteRegistration(token, email, password, fullName string) (*User, error) {
-	// Validate invitation
-	invitation, err := a.ValidateInvitationToken(token)
-	if err != nil || invitation.Email != email {
-		return nil, errors.New("invalid invitation")
-	}
+	var user *User
 
-	// Hash password
-	passwordHash, err := HashPassword(password)
+	// Use transaction to ensure atomicity
+	err := a.DB.Transaction(func(tx *gorm.DB) error {
+		// Validate invitation
+		invitation, err := a.validateInvitationTokenInTx(tx, token)
+		if err != nil || invitation.Email != email {
+			return errors.New("invalid invitation")
+		}
+
+		// Hash password
+		passwordHash, err := HashPassword(password)
+		if err != nil {
+			return err
+		}
+
+		// Create user
+		now := time.Now()
+		user = &User{
+			EmailAddress:  email,
+			PasswordHash:  passwordHash,
+			FullName:      fullName,
+			Active:        true,
+			IsAdmin:       false,
+			EmailVerified: false,
+			InvitedBy:     &invitation.InvitedBy,
+			RegisteredAt:  &now,
+		}
+
+		err = tx.Create(user).Error
+		if err != nil {
+			return err
+		}
+
+		// Mark invitation as used
+		invitation.Used = true
+		invitation.UsedAt = &now
+		err = tx.Save(&invitation).Error
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	// Create user
-	user := User{
-		EmailAddress:  email,
-		PasswordHash:  passwordHash,
-		FullName:      fullName,
-		Active:        true,
-		IsAdmin:       false,
-		EmailVerified: false,
-		InvitedBy:     &invitation.InvitedBy,
-		RegisteredAt:  &time.Time{},
-	}
-	*user.RegisteredAt = time.Now()
-
-	err = a.DB.Create(&user).Error
-	if err != nil {
-		return nil, err
-	}
-
-	// Mark invitation as used
-	invitation.Used = true
-	invitation.UsedAt = &time.Time{}
-	*invitation.UsedAt = time.Now()
-	a.DB.Save(&invitation)
-
-	return &user, nil
+	return user, nil
 }
 
-func generateSecureToken(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	token := make([]byte, length)
-
-	for i := range token {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		token[i] = charset[num.Int64()]
-	}
-
-	return string(token)
+// validateInvitationTokenInTx validates invitation within a transaction
+func (a *App) validateInvitationTokenInTx(tx *gorm.DB, token string) (*Invitation, error) {
+	var invitation Invitation
+	err := tx.Where("token = ? AND used = ? AND expires_at > ?", token, false, time.Now()).First(&invitation).Error
+	return &invitation, err
 }
+
+// generateSecureToken is now GenerateSecureToken in utils.go
 
 // GetFormattedRegistrationDate returns a nicely formatted registration date
 func (user *User) GetFormattedRegistrationDate() string {

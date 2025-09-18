@@ -15,6 +15,7 @@ type EmailService interface {
 	SendVerificationCode(email, code string) error
 	SendInvitation(email, token string) error
 	SendPasswordReset(email, token string) error
+	SetBaseURL(baseURL string)
 }
 
 type SMTPEmailService struct {
@@ -24,6 +25,7 @@ type SMTPEmailService struct {
 	Password  string
 	FromEmail string
 	FromName  string
+	BaseURL   string
 }
 
 type MailgunEmailService struct {
@@ -31,9 +33,12 @@ type MailgunEmailService struct {
 	APIKey    string
 	FromEmail string
 	FromName  string
+	BaseURL   string
 }
 
-type ConsoleEmailService struct{}
+type ConsoleEmailService struct {
+	BaseURL string
+}
 
 type EmailQueue struct {
 	Email       string `gorm:"index"`
@@ -49,26 +54,30 @@ type EmailQueue struct {
 func (a *App) SetupEmailService() {
 	switch a.Config.EmailService {
 	case "smtp":
-		a.EmailService = SMTPEmailService{
+		a.EmailService = &SMTPEmailService{
 			Host:      a.Config.SMTPHost,
 			Port:      a.Config.SMTPPort,
 			Username:  a.Config.SMTPUsername,
 			Password:  a.Config.SMTPPassword,
 			FromEmail: a.Config.SMTPFromEmail,
 			FromName:  a.Config.SMTPFromName,
+			BaseURL:   a.Config.BaseURL,
 		}
-		log.Println("Email service configured: SMTP")
+		LogEmail().Info("Email service configured: SMTP")
 	case "mailgun":
-		a.EmailService = MailgunEmailService{
+		a.EmailService = &MailgunEmailService{
 			Domain:    a.Config.MailgunDomain,
 			APIKey:    a.Config.MailgunAPIKey,
 			FromEmail: a.Config.MailgunFromEmail,
 			FromName:  a.Config.MailgunFromName,
+			BaseURL:   a.Config.BaseURL,
 		}
-		log.Println("Email service configured: Mailgun")
+		LogEmail().Info("Email service configured: Mailgun")
 	default:
-		a.EmailService = ConsoleEmailService{}
-		log.Println("Email service configured: Console(default)")
+		a.EmailService = &ConsoleEmailService{
+			BaseURL: a.Config.BaseURL,
+		}
+		LogEmail().Info("Email service configured: Console (default)")
 	}
 }
 
@@ -87,7 +96,7 @@ func (a *App) SendVerificationEmailAsync(email, code string) {
 		a.processEmailQueue(&emailQueue)
 	}()
 
-	log.Printf("Email sending initiated for %s", email)
+	LogEmail().WithField("user", SanitizeEmail(email)).Debug("Email sending initiated")
 }
 
 func (a *App) processEmailQueue(emailQueue *EmailQueue) {
@@ -103,7 +112,11 @@ func (a *App) processEmailQueue(emailQueue *EmailQueue) {
 		err := a.EmailService.SendVerificationCode(emailQueue.Email, emailQueue.Code)
 
 		if err != nil {
-			log.Printf("Email attempt %d failed for %s: %v", emailQueue.Attempts, emailQueue.Email, err)
+			LogEmail().WithFields(map[string]interface{}{
+				"user": SanitizeEmail(emailQueue.Email),
+				"attempt": emailQueue.Attempts,
+				"error": err.Error(),
+			}).Warn("Email sending attempt failed")
 
 			backoffMinutes := emailQueue.Attempts * emailQueue.Attempts * 5 // 5, 20, 45 minutes
 			emailQueue.NextRetry = time.Now().Add(time.Duration(backoffMinutes) * time.Minute)
@@ -116,7 +129,10 @@ func (a *App) processEmailQueue(emailQueue *EmailQueue) {
 			}
 		} else {
 			// Success!
-			log.Printf("Email successfully sent to %s after %d attempts", emailQueue.Email, emailQueue.Attempts)
+			LogEmail().WithFields(map[string]interface{}{
+				"user": SanitizeEmail(emailQueue.Email),
+				"attempts": emailQueue.Attempts,
+			}).Info("Email sent successfully")
 			emailQueue.Sent = true
 			emailQueue.Error = ""
 			a.DB.Save(emailQueue)
@@ -126,15 +142,24 @@ func (a *App) processEmailQueue(emailQueue *EmailQueue) {
 }
 
 func (a *App) notifyAdminEmailFailure(emailQueue *EmailQueue) {
-	log.Printf("ADMIN ALERT: Failed to send email to %s after %d attempts. Error: %s", emailQueue.Email, emailQueue.MaxAttempts, emailQueue.Error)
+	LogEmail().WithFields(map[string]interface{}{
+		"user": SanitizeEmail(emailQueue.Email),
+		"max_attempts": emailQueue.MaxAttempts,
+		"error": emailQueue.Error,
+	}).Error("ADMIN ALERT: Email delivery failed after all attempts")
 
-	// TODO: optionally add slack or discord notification.
-	//TODO: Email Admin.
-	//TODO: Notify Admin within web interface somehow.
-	//TODO: Send notification to monitoring system.
+	// For now, we log the failure. In the future, consider:
+	// - Adding Slack/Discord webhook notifications
+	// - Sending email alerts to admin (requires separate reliable email service)
+	// - Adding admin dashboard notifications
+	// - Integrating with monitoring systems (Prometheus, DataDog, etc.)
+
+	// Mark this failure in the database for admin review
+	emailQueue.Error = "ADMIN_NOTIFIED: " + emailQueue.Error
+	a.DB.Save(emailQueue)
 }
 
-func (c ConsoleEmailService) SendVerificationCode(email, code string) error {
+func (c *ConsoleEmailService) SendVerificationCode(email, code string) error {
 	log.Printf("===VERIFICATION EMAIL===")
 	log.Printf("To: %s", email)
 	log.Printf("Your Verification code: %s", code)
@@ -143,27 +168,52 @@ func (c ConsoleEmailService) SendVerificationCode(email, code string) error {
 	return nil
 }
 
-func (c ConsoleEmailService) SendInvitation(email, token string) error {
+func (c *ConsoleEmailService) SetBaseURL(baseURL string) {
+	c.BaseURL = baseURL
+}
+
+func (c *ConsoleEmailService) SendInvitation(email, token string) error {
 	log.Printf("===INVITATION EMAIL===")
 	log.Printf("To: %s", email)
-	//TODO: I can see that if we alter the hostname or port this fails. Need config management of this data just incase.
-	log.Printf("Click here to register: http://localhost:3000/register?token=%s", token)
+	log.Printf("Click here to register: %s/register?token=%s", c.BaseURL, token)
 	log.Printf("================================")
 	return nil
 }
 
-func (c ConsoleEmailService) SendPasswordReset(email, token string) error {
+func (c *ConsoleEmailService) SendPasswordReset(email, token string) error {
 	log.Printf("===PASSWORD RESET EMAIL===")
 	log.Printf("To: %s", email)
-	log.Printf("Click here to reset your password: http://localhost:3000/reset-password?token=%s", token)
+	log.Printf("Click here to reset your password: %s/reset-password?token=%s", c.BaseURL, token)
 	log.Printf("(This link expires in 1 hour)")
 	log.Printf("================================")
 	return nil
 }
 
-func (s SMTPEmailService) SendVerificationCode(email, code string) error {
+// sendSMTPEmail is a generic function for sending emails via SMTP
+func (s *SMTPEmailService) sendSMTPEmail(to, subject, body string) error {
 	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
 
+	message := fmt.Sprintf("From: %s <%s>\r\n"+
+		"To: %s\r\n"+
+		"Subject: %s\r\n"+
+		"\r\n"+
+		"%s\r\n", s.FromName, s.FromEmail, to, subject, body)
+
+	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
+	err := smtp.SendMail(addr, auth, s.FromEmail, []string{to}, []byte(message))
+	if err != nil {
+		LogEmail().WithFields(map[string]interface{}{
+			"user": SanitizeEmail(to),
+			"error": err.Error(),
+		}).Error("SMTP email failed")
+		return err
+	}
+
+	LogEmail().WithField("user", SanitizeEmail(to)).Info("SMTP email sent successfully")
+	return nil
+}
+
+func (s *SMTPEmailService) SendVerificationCode(email, code string) error {
 	subject := "Your Verification Code"
 	body := fmt.Sprintf(`Hello!
 
@@ -176,94 +226,75 @@ If you didn't request this code, please ignore this email.
 Kind regards,
 %s`, code, s.FromName)
 
-	message := fmt.Sprintf("From: %s <%s>\r\n"+
-		"To: %s\r\n"+
-		"Subject: %s\r\n"+
-		"\r\n"+
-		"%s\r\n", s.FromName, s.FromEmail, email, subject, body)
-
-	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
-	err := smtp.SendMail(addr, auth, s.FromEmail, []string{email}, []byte(message))
-	if err != nil {
-		log.Printf("SMTP Error: %v", err)
-	}
-
-	log.Printf("SMTP email sent to %s", email)
-	return nil
+	return s.sendSMTPEmail(email, subject, body)
 }
 
-func (s SMTPEmailService) SendInvitation(email, token string) error {
-	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
-
-	//TODO: add config for name of website instead of "our blog" perhaps??
+func (s *SMTPEmailService) SendInvitation(email, token string) error {
 	subject := "You've been Invited to Join our Blog"
-	//TODO: There should be config parameters used for domain/port here.
 	body := fmt.Sprintf(`
 		<h1>You're Invited!</h1>
 		<p>Click the link below to complete your registration:</p>
-		<a href="http://localhost:3000/register?token=%s">Complete Registration</a>
+		<a href="%s/register?token=%s">Complete Registration</a>
 		<p>This invitation expires in 7 days.</p>
 		<p>Kind regards</p>
 
 		<p>%s</p>
-		`, token, s.FromName)
+		`, s.BaseURL, token, s.FromName)
 
-	//TODO: Make this into a generic sendEmail() function: It's being used more than once (see above).
-	message := fmt.Sprintf("From: %s <%s>\r\n"+
-		"To: %s\r\n"+
-		"Subject: %s\r\n"+
-		"\r\n"+
-		"%s\r\n", s.FromName, s.FromEmail, email, subject, body)
-
-	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
-	err := smtp.SendMail(addr, auth, s.FromEmail, []string{email}, []byte(message))
-	if err != nil {
-		//TODO: Where this fails, we need to notify the admin in some way / or log it in a 'log' table for someone to fix soon.
-		log.Printf("SMTP Error: %v", err)
-
-	}
-	//TODO: Log this sort of thing too (in a table).
-	log.Printf("SMTP email sent to %s", email)
-	return nil
+	return s.sendSMTPEmail(email, subject, body)
 }
 
-func (s SMTPEmailService) SendPasswordReset(email, token string) error {
-	auth := smtp.PlainAuth("", s.Username, s.Password, s.Host)
-
+func (s *SMTPEmailService) SendPasswordReset(email, token string) error {
 	subject := "Password Reset Request"
 	body := fmt.Sprintf(`Hello!
 
 We received a request to reset your password. Click the link below to create a new password:
 
-http://localhost:3000/reset-password?token=%s
+%s/reset-password?token=%s
 
 This link will expire in 1 hour.
 
 If you didn't request this password reset, please ignore this email.
 
 Kind regards,
-%s`, token, s.FromName)
+%s`, s.BaseURL, token, s.FromName)
 
-	message := fmt.Sprintf("From: %s <%s>\r\n"+
-		"To: %s\r\n"+
-		"Subject: %s\r\n"+
-		"\r\n"+
-		"%s\r\n", s.FromName, s.FromEmail, email, subject, body)
+	return s.sendSMTPEmail(email, subject, body)
+}
 
-	addr := fmt.Sprintf("%s:%s", s.Host, s.Port)
-	err := smtp.SendMail(addr, auth, s.FromEmail, []string{email}, []byte(message))
+func (s *SMTPEmailService) SetBaseURL(baseURL string) {
+	s.BaseURL = baseURL
+}
+
+// sendMailgunEmail is a generic function for sending emails via Mailgun
+func (m *MailgunEmailService) sendMailgunEmail(to, subject, body string) error {
+	mg := mailgun.NewMailgun(m.Domain, m.APIKey)
+
+	message := mailgun.NewMessage(
+		fmt.Sprintf("%s <%s>", m.FromName, m.FromEmail),
+		subject,
+		"", // Plain text version, empty for now.
+		to,
+	)
+	message.SetHTML(body)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	_, _, err := mg.Send(ctx, message)
 	if err != nil {
-		log.Printf("SMTP Error: %v", err)
+		LogEmail().WithFields(map[string]interface{}{
+			"user": SanitizeEmail(to),
+			"error": err.Error(),
+		}).Error("Mailgun email failed")
 		return err
 	}
 
-	log.Printf("SMTP password reset email sent to %s", email)
+	LogEmail().WithField("user", SanitizeEmail(to)).Info("Mailgun email sent successfully")
 	return nil
 }
 
-func (m MailgunEmailService) SendVerificationCode(email, code string) error {
-	mg := mailgun.NewMailgun(m.Domain, m.APIKey)
-
+func (m *MailgunEmailService) SendVerificationCode(email, code string) error {
 	subject := "Your Verification Code"
 	body := fmt.Sprintf(`Hello!
 
@@ -275,100 +306,42 @@ If you didn't request this code, please ignore this email.
 
 Kind regards,
 %s`, code, m.FromName)
-	message := mailgun.NewMessage(
-		fmt.Sprintf("%s <%s>", m.FromName, m.FromEmail),
-		subject,
-		"", // Plain text version, empty for now.
-		email,
-	)
-	message.SetHTML(body)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-
-	_, _, err := mg.Send(ctx, message)
-	if err != nil {
-		log.Printf("Mailgun Error: %v", err)
-		return err
-	}
-
-	log.Printf("Mailgun email sent to %s", email)
-	return nil
+	return m.sendMailgunEmail(email, subject, body)
 }
 
-// TODO: Fix this.
-func (m MailgunEmailService) SendInvitation(email, token string) error {
-	mg := mailgun.NewMailgun(m.Domain, m.APIKey)
-
-	//TODO: add config for name of website instead of "our blog" perhaps??
+func (m *MailgunEmailService) SendInvitation(email, token string) error {
 	subject := "You're Invited to Join Our Blog"
-	//TODO: There should be config parameters used for domain/port here.
 	body := fmt.Sprintf(`
 	<h1>You're Invited!</h1>
 	<p>Click the link below to complete your registration:</p>
-	<a href="http://localhost:3000/register?token=%s">Complete Registration</a>
+	<a href="%s/register?token=%s">Complete Registration</a>
 	<p>This invitation expires in 7 days.</p>
 
 		<p>Kind regards</p>
 
 		<p>%s</p>
-	`, token, m.FromName)
-	message := mailgun.NewMessage(
-		fmt.Sprintf("%s <%s>", m.FromName, m.FromEmail),
-		subject,
-		"", // Plain text version, empty for now.
-		email,
-	)
-	//TODO: Make this into a generic sendEmail() function: It's being used more than once (see above).
-	message.SetHTML(body)
+	`, m.BaseURL, token, m.FromName)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-
-	_, _, err := mg.Send(ctx, message)
-	if err != nil {
-		//TODO: Where this fails, we need to notify the admin in some way / or log it in a 'log' table for someone to fix soon.
-		log.Printf("Mailgun Error: %v", err)
-		return err
-	}
-
-	//TODO: Log this sort of thing too (in a table).
-	log.Printf("Mailgun email sent to %s", email)
-	return nil
+	return m.sendMailgunEmail(email, subject, body)
 }
 
-func (m MailgunEmailService) SendPasswordReset(email, token string) error {
-	mg := mailgun.NewMailgun(m.Domain, m.APIKey)
-
+func (m *MailgunEmailService) SendPasswordReset(email, token string) error {
 	subject := "Password Reset Request"
 	body := fmt.Sprintf(`
 	<h1>Password Reset Request</h1>
 	<p>We received a request to reset your password. Click the link below to create a new password:</p>
-	<a href="http://localhost:3000/reset-password?token=%s">Reset Your Password</a>
+	<a href="%s/reset-password?token=%s">Reset Your Password</a>
 	<p>This link will expire in 1 hour.</p>
 	<p>If you didn't request this password reset, please ignore this email.</p>
 
 	<p>Kind regards</p>
 	<p>%s</p>
-	`, token, m.FromName)
+	`, m.BaseURL, token, m.FromName)
 
-	message := mailgun.NewMessage(
-		fmt.Sprintf("%s <%s>", m.FromName, m.FromEmail),
-		subject,
-		"", // Plain text version, empty for now.
-		email,
-	)
-	message.SetHTML(body)
+	return m.sendMailgunEmail(email, subject, body)
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
-	defer cancel()
-
-	_, _, err := mg.Send(ctx, message)
-	if err != nil {
-		log.Printf("Mailgun Error: %v", err)
-		return err
-	}
-
-	log.Printf("Mailgun password reset email sent to %s", email)
-	return nil
+func (m *MailgunEmailService) SetBaseURL(baseURL string) {
+	m.BaseURL = baseURL
 }

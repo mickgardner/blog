@@ -1,0 +1,649 @@
+<div class="admin-dashboard">
+  <!-- Dashboard Header -->
+  <div class="dashboard-header">
+    <div class="header-content">
+      <div class="header-left">
+        <h1 class="dashboard-title">Dashboard</h1>
+        <p class="dashboard-subtitle">Welcome back, {{ User.FullName }}!</p>
+      </div>
+      <div class="header-right">
+        <div class="quick-actions">
+          <a href="/admin/articles/new" class="quick-action-btn primary">
+            <span class="action-icon">➕</span>
+            New Article
+          </a>
+          <a href="/" class="quick-action-btn" target="_blank">
+            <span class="action-icon">🌐</span>
+            View Site
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dashboard Content -->
+  <div class="dashboard-content">
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3 class="stat-title">Total Articles</h3>
+          <div class="stat-icon">📝</div>
+        </div>
+        <div class="stat-number">{{ TotalArticles }}</div>
+        <div class="stat-footer">
+          <span class="stat-change positive">{{ PublishedArticles }} published</span>
+          <a href="/admin/articles" class="stat-link">View all →</a>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3 class="stat-title">Draft Articles</h3>
+          <div class="stat-icon">📄</div>
+        </div>
+        <div class="stat-number">{{ DraftArticles }}</div>
+        <div class="stat-footer">
+          <span class="stat-change neutral">Ready to publish</span>
+          <a href="/admin/articles?status=draft" class="stat-link">View drafts →</a>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3 class="stat-title">Total Users</h3>
+          <div class="stat-icon">👥</div>
+        </div>
+        <div class="stat-number">{{ TotalUsers }}</div>
+        <div class="stat-footer">
+          <span class="stat-change positive">{{ ActiveUsers }} active</span>
+          <a href="/admin/invite" class="stat-link">Invite more →</a>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <h3 class="stat-title">Site Health</h3>
+          <div class="stat-icon">💚</div>
+        </div>
+        <div class="stat-number">Good</div>
+        <div class="stat-footer">
+          <span class="stat-change positive">All systems operational</span>
+          <span class="stat-link">Last checked: now</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="dashboard-grid">
+      <!-- Recent Articles -->
+      <div class="dashboard-widget">
+        <div class="widget-header">
+          <h2 class="widget-title">Recent Articles</h2>
+          <a href="/admin/articles" class="widget-action">View All</a>
+        </div>
+        <div class="widget-content">
+          {% if RecentArticles %}
+          <div class="articles-list">
+            {% for article in RecentArticles %}
+            <div class="article-item">
+              <div class="article-info">
+                <h4 class="article-title">
+                  <a href="/admin/articles/{{ article.ID }}/edit">{{ article.Title }}</a>
+                </h4>
+                <div class="article-meta">
+                  <span class="meta-status {{ article.IsPublished|yesno:'published,draft' }}">
+                    {{ article.IsPublished|yesno:'Published,Draft' }}
+                  </span>
+                  <span class="meta-date">{{ article.GetFormattedUpdatedAt }}</span>
+                </div>
+              </div>
+              <div class="article-actions">
+                <a href="/admin/articles/{{ article.ID }}/edit" class="action-btn edit">Edit</a>
+                {% if article.IsPublished %}
+                <a href="/article/{{ article.Slug }}" class="action-btn view" target="_blank">View</a>
+                {% endif %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          <div class="empty-state">
+            <div class="empty-icon">📝</div>
+            <h3>No articles yet</h3>
+            <p>Start creating content for your blog!</p>
+            <a href="/admin/articles/new" class="empty-action">Create your first article</a>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="dashboard-widget">
+        <div class="widget-header">
+          <h2 class="widget-title">Quick Actions</h2>
+        </div>
+        <div class="widget-content">
+          <div class="actions-grid">
+            <a href="/admin/articles/new" class="action-card">
+              <div class="action-icon">➕</div>
+              <div class="action-content">
+                <h3>New Article</h3>
+                <p>Create a new blog post</p>
+              </div>
+            </a>
+
+            <a href="/admin/articles" class="action-card">
+              <div class="action-icon">📝</div>
+              <div class="action-content">
+                <h3>Manage Articles</h3>
+                <p>Edit existing content</p>
+              </div>
+            </a>
+
+            <a href="/admin/invite" class="action-card">
+              <div class="action-icon">👥</div>
+              <div class="action-content">
+                <h3>Invite User</h3>
+                <p>Add new team members</p>
+              </div>
+            </a>
+
+            <a href="/profile" class="action-card">
+              <div class="action-icon">👤</div>
+              <div class="action-content">
+                <h3>Profile Settings</h3>
+                <p>Update your information</p>
+              </div>
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity Feed -->
+      <div class="dashboard-widget full-width">
+        <div class="widget-header">
+          <h2 class="widget-title">Recent Activity</h2>
+        </div>
+        <div class="widget-content">
+          <div class="activity-feed">
+            <div class="activity-item">
+              <div class="activity-icon">📝</div>
+              <div class="activity-content">
+                <div class="activity-title">Welcome to your blog admin!</div>
+                <div class="activity-meta">
+                  <span class="activity-user">System</span>
+                  <span class="activity-time">Just now</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .admin-dashboard {
+    max-width: none;
+  }
+  
+  /* Dashboard Header */
+  .dashboard-header {
+    background: white;
+    border-bottom: 1px solid #c3c4c7;
+    margin: -20px -20px 30px;
+    padding: 30px 30px;
+  }
+  
+  .header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+  }
+  
+  .dashboard-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    color: #1d2327;
+    margin: 0 0 8px;
+  }
+  
+  .dashboard-subtitle {
+    font-size: 1rem;
+    color: #646970;
+    margin: 0;
+  }
+  
+  .quick-actions {
+    display: flex;
+    gap: 12px;
+  }
+  
+  .quick-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: white;
+    border: 1px solid #c3c4c7;
+    color: #2271b1;
+    text-decoration: none;
+    border-radius: 3px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  
+  .quick-action-btn:hover {
+    background: #f6f7f7;
+    border-color: #8c8f94;
+  }
+  
+  .quick-action-btn.primary {
+    background: #2271b1;
+    color: white;
+    border-color: #2271b1;
+  }
+  
+  .quick-action-btn.primary:hover {
+    background: #135e96;
+  }
+  
+  .action-icon {
+    font-size: 1rem;
+  }
+  
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  
+  .stat-card {
+    background: white;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+    padding: 20px;
+    transition: box-shadow 0.2s ease;
+  }
+  
+  .stat-card:hover {
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .stat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  }
+  
+  .stat-title {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #646970;
+    margin: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  .stat-icon {
+    font-size: 1.2rem;
+    opacity: 0.6;
+  }
+  
+  .stat-number {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #1d2327;
+    margin-bottom: 10px;
+    line-height: 1.2;
+  }
+  
+  .stat-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+  }
+  
+  .stat-change {
+    font-weight: 500;
+  }
+  
+  .stat-change.positive {
+    color: #00a32a;
+  }
+  
+  .stat-change.neutral {
+    color: #646970;
+  }
+  
+  .stat-link {
+    color: #2271b1;
+    text-decoration: none;
+  }
+  
+  .stat-link:hover {
+    text-decoration: underline;
+  }
+  
+  /* Dashboard Grid */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+  }
+  
+  .dashboard-widget {
+    background: white;
+    border: 1px solid #c3c4c7;
+    border-radius: 4px;
+  }
+  
+  .dashboard-widget.full-width {
+    grid-column: 1 / -1;
+  }
+  
+  .widget-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 20px 0;
+    margin-bottom: 20px;
+  }
+  
+  .widget-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #1d2327;
+    margin: 0;
+  }
+  
+  .widget-action {
+    color: #2271b1;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  
+  .widget-action:hover {
+    text-decoration: underline;
+  }
+  
+  .widget-content {
+    padding: 0 20px 20px;
+  }
+  
+  /* Articles List */
+  .articles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .article-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    border-left: 4px solid transparent;
+  }
+  
+  .article-item:hover {
+    background: #f0f0f1;
+  }
+  
+  .article-info {
+    flex: 1;
+  }
+  
+  .article-title {
+    margin: 0 0 8px;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+  
+  .article-title a {
+    color: #2271b1;
+    text-decoration: none;
+  }
+  
+  .article-title a:hover {
+    text-decoration: underline;
+  }
+  
+  .article-meta {
+    display: flex;
+    gap: 15px;
+    font-size: 0.85rem;
+    color: #646970;
+  }
+  
+  .meta-status {
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-weight: 500;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .meta-status.published {
+    background: #00a32a;
+    color: white;
+  }
+  
+  .meta-status.draft {
+    background: #dba617;
+    color: white;
+  }
+  
+  .article-actions {
+    display: flex;
+    gap: 8px;
+  }
+  
+  .action-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    text-decoration: none;
+    border-radius: 3px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  
+  .action-btn.edit {
+    color: #2271b1;
+    border: 1px solid #2271b1;
+  }
+  
+  .action-btn.edit:hover {
+    background: #2271b1;
+    color: white;
+  }
+  
+  .action-btn.view {
+    color: #00a32a;
+    border: 1px solid #00a32a;
+  }
+  
+  .action-btn.view:hover {
+    background: #00a32a;
+    color: white;
+  }
+  
+  /* Actions Grid */
+  .actions-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+  }
+  
+  .action-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 4px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s ease;
+    border-left: 4px solid transparent;
+  }
+  
+  .action-card:hover {
+    background: #f0f0f1;
+    border-left-color: #2271b1;
+  }
+  
+  .action-card .action-icon {
+    font-size: 1.5rem;
+    opacity: 0.7;
+  }
+  
+  .action-content h3 {
+    margin: 0 0 4px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #1d2327;
+  }
+  
+  .action-content p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: #646970;
+  }
+  
+  /* Activity Feed */
+  .activity-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 4px;
+  }
+  
+  .activity-item .activity-icon {
+    font-size: 1.2rem;
+    opacity: 0.6;
+    margin-top: 2px;
+  }
+  
+  .activity-content {
+    flex: 1;
+  }
+  
+  .activity-title {
+    font-weight: 500;
+    color: #1d2327;
+    margin-bottom: 4px;
+  }
+  
+  .activity-meta {
+    font-size: 0.85rem;
+    color: #646970;
+    display: flex;
+    gap: 10px;
+  }
+  
+  /* Empty State */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+  }
+  
+  .empty-icon {
+    font-size: 3rem;
+    opacity: 0.3;
+    margin-bottom: 15px;
+  }
+  
+  .empty-state h3 {
+    margin: 0 0 8px;
+    color: #1d2327;
+    font-size: 1.1rem;
+  }
+  
+  .empty-state p {
+    margin: 0 0 20px;
+    color: #646970;
+  }
+  
+  .empty-action {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #2271b1;
+    color: white;
+    text-decoration: none;
+    border-radius: 3px;
+    font-weight: 500;
+    transition: background 0.2s ease;
+  }
+  
+  .empty-action:hover {
+    background: #135e96;
+  }
+  
+  /* Mobile Responsive */
+  @media (max-width: 1024px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .actions-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .dashboard-header {
+      padding: 20px 20px;
+      margin: -20px -15px 20px;
+    }
+    
+    .header-content {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 15px;
+    }
+    
+    .quick-actions {
+      justify-content: stretch;
+    }
+    
+    .quick-action-btn {
+      flex: 1;
+      justify-content: center;
+    }
+    
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .article-item {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    
+    .article-actions {
+      justify-content: flex-end;
+    }
+  }
+</style>

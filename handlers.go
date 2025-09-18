@@ -3,6 +3,8 @@ package main
 import (
 	"github.com/gofiber/fiber/v2"
 	"log"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -23,6 +25,7 @@ func (a *App) GetTemplateData(c *fiber.Ctx, data fiber.Map) fiber.Map {
 func (a *App) IndexHandler(c *fiber.Ctx) error {
 	articles, err := a.GetPublishedArticles()
 	if err != nil {
+		LogHTTP().WithError(err).Error("Failed to fetch published articles")
 		return fiber.ErrInternalServerError
 	}
 	return c.Render("index", a.GetTemplateData(c, fiber.Map{
@@ -35,6 +38,10 @@ func (a *App) ArticleHandler(c *fiber.Ctx) error {
 	slug := c.Params("slug")
 	article, err := a.GetArticle(slug)
 	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"slug": slug,
+			"error": err.Error(),
+		}).Warn("Article not found")
 		return fiber.ErrNotFound
 	}
 	return c.Render("article", a.GetTemplateData(c, fiber.Map{
@@ -61,7 +68,7 @@ func (a *App) LoginHandler(c *fiber.Ctx) error {
 
 // Process the login form data - authenticate with email/password
 func (a *App) LoginPostHandler(c *fiber.Ctx) error {
-	email := c.FormValue("email")
+	email := strings.TrimSpace(c.FormValue("email"))
 	password := c.FormValue("password")
 
 	if email == "" || password == "" {
@@ -73,10 +80,23 @@ func (a *App) LoginPostHandler(c *fiber.Ctx) error {
 		}, "layouts/base")
 	}
 
+	// Validate email format
+	if !isValidEmail(email) {
+		return c.Render("auth/login", fiber.Map{
+			"Title":      "Login",
+			"csrf_token": c.Locals("csrf_token"),
+			"Error":      "Please enter a valid email address",
+			"Email":      email,
+		}, "layouts/base")
+	}
+
 	// Authenticate user
 	user, err := a.AuthenticateUser(email, password)
 	if err != nil {
-		log.Printf("Login attempt failed for %s: %v", email, err)
+		LogAuth().WithFields(map[string]interface{}{
+			"user": SanitizeEmail(email),
+			"error": err.Error(),
+		}).Warn("Login attempt failed")
 		return c.Render("auth/login", fiber.Map{
 			"Title":      "Login",
 			"csrf_token": c.Locals("csrf_token"),
@@ -121,7 +141,7 @@ func (a *App) LoginPostHandler(c *fiber.Ctx) error {
 	// Email already verified, log user in directly
 	err = a.CreateUserSession(c, user)
 	if err != nil {
-		log.Printf("Failed to create session: %v", err)
+		LogAuth().WithError(err).Error("Failed to create session after login")
 		return c.Render("auth/login", fiber.Map{
 			"Title":      "Login",
 			"csrf_token": c.Locals("csrf_token"),
@@ -130,7 +150,7 @@ func (a *App) LoginPostHandler(c *fiber.Ctx) error {
 		}, "layouts/base")
 	}
 
-	log.Printf("User logged in: %s", user.EmailAddress)
+	LogAuth().WithField("user", SanitizeEmail(user.EmailAddress)).Info("User logged in successfully")
 	redirectURL := a.RedirectAfterLogin(c)
 	return c.Redirect(redirectURL)
 }
@@ -152,7 +172,10 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 	// Verify the code
 	_, err := a.VerifyCode(email, code)
 	if err != nil {
-		log.Printf("Verify Code attempt failed for %s, with error %s", email, err)
+		LogAuth().WithFields(map[string]interface{}{
+			"user": SanitizeEmail(email),
+			"error": err.Error(),
+		}).Warn("Email verification failed")
 		return c.Render("auth/verify", fiber.Map{
 			"Title":      "Verify Email",
 			"csrf_token": c.Locals("csrf_token"),
@@ -164,7 +187,10 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 	// Get user and mark email as verified
 	user, err := a.GetUserByEmail(email)
 	if err != nil {
-		log.Printf("User not found for email %s: %v", email, err)
+		LogAuth().WithFields(map[string]interface{}{
+			"user": SanitizeEmail(email),
+			"error": err.Error(),
+		}).Error("User not found during verification")
 		return c.Render("auth/verify", fiber.Map{
 			"Title":      "Verify Email",
 			"csrf_token": c.Locals("csrf_token"),
@@ -180,7 +206,7 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 	// Create session and log user in
 	err = a.CreateUserSession(c, user)
 	if err != nil {
-		log.Printf("Failed to create session: %v", err)
+		LogAuth().WithError(err).Error("Failed to create session after verification")
 		return c.Render("auth/verify", fiber.Map{
 			"Title":      "Verify Email",
 			"csrf_token": c.Locals("csrf_token"),
@@ -189,7 +215,7 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 		}, "layouts/base")
 	}
 
-	log.Printf("Email verified and session created for user: %s", user.EmailAddress)
+	LogAuth().WithField("user", SanitizeEmail(user.EmailAddress)).Info("Email verified and session created")
 	redirectURL := a.RedirectAfterLogin(c)
 	return c.Redirect(redirectURL)
 }
@@ -198,7 +224,7 @@ func (a *App) VerifyCodeHandler(c *fiber.Ctx) error {
 func (a *App) LogoutHandler(c *fiber.Ctx) error {
 	err := a.DestroySession(c)
 	if err != nil {
-		log.Printf("Error destroying session: %v", err)
+		LogAuth().WithError(err).Warn("Error destroying session during logout")
 	}
 
 	return c.Redirect("/login")
@@ -210,6 +236,34 @@ func (a *App) DashboardHandler(c *fiber.Ctx) error {
 	return c.Render("pages/dashboard", a.GetTemplateData(c, fiber.Map{
 		"Title": "Dashboard",
 	}), "layouts/base")
+}
+
+// Admin Dashboard Handler
+func (a *App) AdminDashboardHandler(c *fiber.Ctx) error {
+	// Get dashboard statistics
+	var totalArticles, publishedArticles, draftArticles int64
+	var totalUsers, activeUsers int64
+	
+	a.DB.Model(&Article{}).Count(&totalArticles)
+	a.DB.Model(&Article{}).Where("published_at IS NOT NULL AND published_at <= ?", time.Now()).Count(&publishedArticles)
+	a.DB.Model(&Article{}).Where("published_at IS NULL").Count(&draftArticles)
+	a.DB.Model(&User{}).Count(&totalUsers)
+	a.DB.Model(&User{}).Where("active = ?", true).Count(&activeUsers)
+	
+	// Get recent articles
+	var recentArticles []Article
+	a.DB.Preload("Author").Order("updated_at DESC").Limit(5).Find(&recentArticles)
+	
+	return c.Render("admin/dashboard", a.GetTemplateData(c, fiber.Map{
+		"Title":            "Dashboard",
+		"AdminPage":        true,
+		"TotalArticles":    totalArticles,
+		"PublishedArticles": publishedArticles,
+		"DraftArticles":    draftArticles,
+		"TotalUsers":       totalUsers,
+		"ActiveUsers":      activeUsers,
+		"RecentArticles":   recentArticles,
+	}), "layouts/admin")
 }
 
 // A profile page for users personal account and login details.
@@ -238,13 +292,21 @@ func (a *App) AuthorHandler(c *fiber.Ctx) error {
 	var author User
 	err := a.DB.Where("id = ?", authorID).First(&author).Error
 	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"author_id": authorID,
+			"error": err.Error(),
+		}).Warn("Author not found")
 		return fiber.ErrNotFound
 	}
-	
+
 	// Get articles by this author
 	var articles []Article
 	err = a.DB.Preload("Author").Where("author_id = ? AND published_at IS NOT NULL AND published_at <= ?", authorID, time.Now()).Order("published_at DESC").Find(&articles).Error
 	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"author_id": authorID,
+			"error": err.Error(),
+		}).Error("Failed to fetch articles for author")
 		return fiber.ErrInternalServerError
 	}
 	
@@ -260,17 +322,27 @@ func (a *App) SendInviteHandler(c *fiber.Ctx) error {
 	if err != nil || !user.IsAdmin {
 		return c.Status(403).Render("errors/403", fiber.Map{
 			"Title": "Access Denied",
-		}, "layouts/base")
+		}, "layouts/admin")
 	}
 
-	email := c.FormValue("email")
-	//TODO: Is there any more validations required for testing the email address???
+	email := strings.TrimSpace(c.FormValue("email"))
+
 	if email == "" {
 		return c.Render("admin/invite", fiber.Map{
 			"Title":      "Send Invitation",
 			"Error":      "Email address is required",
 			"csrf_token": c.Locals("csrf_token"),
-		}, "layouts/base")
+		}, "layouts/admin")
+	}
+
+	// Validate email format
+	if !isValidEmail(email) {
+		return c.Render("admin/invite", fiber.Map{
+			"Title":      "Send Invitation",
+			"Error":      "Please enter a valid email address",
+			"csrf_token": c.Locals("csrf_token"),
+			"Email":      email,
+		}, "layouts/admin")
 	}
 
 	invitation, err := a.CreateInvitation(user.ID, email)
@@ -279,7 +351,7 @@ func (a *App) SendInviteHandler(c *fiber.Ctx) error {
 			"Title":      "Send Invitation",
 			"Error":      err.Error(),
 			"csrf_token": c.Locals("csrf_token"),
-		}, "layouts/base")
+		}, "layouts/admin")
 	}
 
 	err = a.EmailService.SendInvitation(email, invitation.Token)
@@ -288,14 +360,14 @@ func (a *App) SendInviteHandler(c *fiber.Ctx) error {
 			"Title":      "Send Invitation",
 			"Error":      "Failed to send invitation email",
 			"csrf_token": c.Locals("csrf_token"),
-		}, "layouts/base")
+		}, "layouts/admin")
 	}
 
 	return c.Render("admin/invite", fiber.Map{
 		"Title":      "Send Invitation",
 		"Success":    "Invitation sent successfully to " + email,
 		"csrf_token": c.Locals("csrf_token"),
-	}, "layouts/base")
+	}, "layouts/admin")
 }
 
 func (a *App) RegisterHandler(c *fiber.Ctx) error {
@@ -316,9 +388,9 @@ func (a *App) RegisterHandler(c *fiber.Ctx) error {
 
 func (a *App) ProcessRegistrationHandler(c *fiber.Ctx) error {
 	token := c.FormValue("token")
-	email := c.FormValue("email")
+	email := strings.TrimSpace(c.FormValue("email"))
 	password := c.FormValue("password")
-	fullName := c.FormValue("full_name")
+	fullName := strings.TrimSpace(c.FormValue("full_name"))
 
 	if token == "" || email == "" || password == "" || fullName == "" {
 		return c.Render("auth/register", fiber.Map{
@@ -327,6 +399,18 @@ func (a *App) ProcessRegistrationHandler(c *fiber.Ctx) error {
 			"Email":      email,
 			"FullName":   fullName,
 			"Error":      "All fields are required",
+			"csrf_token": c.Locals("csrf_token"),
+		}, "layouts/base")
+	}
+
+	// Validate email format
+	if !isValidEmail(email) {
+		return c.Render("auth/register", fiber.Map{
+			"Title":      "Complete Registration",
+			"Token":      token,
+			"Email":      email,
+			"FullName":   fullName,
+			"Error":      "Please enter a valid email address",
 			"csrf_token": c.Locals("csrf_token"),
 		}, "layouts/base")
 	}
@@ -365,9 +449,10 @@ func (a *App) ProcessRegistrationHandler(c *fiber.Ctx) error {
 
 func (a *App) InviteFormHandler(c *fiber.Ctx) error {
 	return c.Render("admin/invite", a.GetTemplateData(c, fiber.Map{
-		"Title":      "Send Invitation",
+		"Title":      "Invite Users",
+		"InvitePage": true,
 		"csrf_token": c.Locals("csrf_token"),
-	}), "layouts/base")
+	}), "layouts/admin")
 }
 
 // Update user profile information
@@ -381,14 +466,23 @@ func (a *App) UpdateProfileHandler(c *fiber.Ctx) error {
 	var articleCount int64
 	a.DB.Model(&Article{}).Where("author_id = ?", user.ID).Count(&articleCount)
 	
-	fullName := c.FormValue("full_name")
-	email := c.FormValue("email")
+	fullName := strings.TrimSpace(c.FormValue("full_name"))
+	email := strings.TrimSpace(c.FormValue("email"))
 	
 	if fullName == "" || email == "" {
 		return c.Render("pages/profile", a.GetTemplateData(c, fiber.Map{
 			"Title":        "Profile",
 			"ArticleCount": articleCount,
 			"Error":        "Full name and email are required",
+		}), "layouts/base")
+	}
+
+	// Validate email format
+	if !isValidEmail(email) {
+		return c.Render("pages/profile", a.GetTemplateData(c, fiber.Map{
+			"Title":        "Profile",
+			"ArticleCount": articleCount,
+			"Error":        "Please enter a valid email address",
 		}), "layouts/base")
 	}
 	
@@ -517,13 +611,23 @@ func (a *App) ForgotPasswordHandler(c *fiber.Ctx) error {
 
 // Process forgot password form and send reset email
 func (a *App) ForgotPasswordPostHandler(c *fiber.Ctx) error {
-	email := c.FormValue("email")
+	email := strings.TrimSpace(c.FormValue("email"))
 
 	if email == "" {
 		return c.Render("auth/forgot-password", fiber.Map{
 			"Title":      "Forgot Password",
 			"csrf_token": c.Locals("csrf_token"),
 			"Error":      "Email address is required",
+		}, "layouts/base")
+	}
+
+	// Validate email format
+	if !isValidEmail(email) {
+		return c.Render("auth/forgot-password", fiber.Map{
+			"Title":      "Forgot Password",
+			"csrf_token": c.Locals("csrf_token"),
+			"Error":      "Please enter a valid email address",
+			"Email":      email,
 		}, "layouts/base")
 	}
 
@@ -626,3 +730,261 @@ func (a *App) ResetPasswordPostHandler(c *fiber.Ctx) error {
 		"Title": "Password Reset Complete",
 	}, "layouts/base")
 }
+
+// Article Management Handlers
+
+// Show article management list
+func (a *App) ArticleManagementHandler(c *fiber.Ctx) error {
+	articles, err := a.GetAllArticlesForManagement()
+	if err != nil {
+		log.Printf("Failed to get articles for management: %v", err)
+		return fiber.ErrInternalServerError
+	}
+	
+	templateData := fiber.Map{
+		"Title":        "Articles",
+		"ArticlesPage": true,
+		"Articles":     articles,
+	}
+	
+	// Handle success/error messages from query params
+	if success := c.Query("success"); success != "" {
+		templateData["Success"] = success
+	}
+	if errorMsg := c.Query("error"); errorMsg != "" {
+		templateData["Error"] = errorMsg
+	}
+	
+	return c.Render("admin/articles", a.GetTemplateData(c, templateData), "layouts/admin")
+}
+
+// Show new article form
+func (a *App) NewArticleHandler(c *fiber.Ctx) error {
+	return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+		"Title":          "New Article",
+		"NewArticlePage": true,
+		"Article":        Article{}, // Empty article for new form
+	}), "layouts/admin")
+}
+
+// Show edit article form
+func (a *App) EditArticleHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	article, err := a.GetArticleByID(id)
+	if err != nil {
+		log.Printf("Article not found: %v", err)
+		return fiber.ErrNotFound
+	}
+	
+	return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+		"Title":   "Edit Article",
+		"Article": article,
+	}), "layouts/admin")
+}
+
+// Create new article
+func (a *App) CreateArticleHandler(c *fiber.Ctx) error {
+	user, err := a.GetCurrentUser(c)
+	if err != nil {
+		return c.Redirect("/login")
+	}
+	
+	title := strings.TrimSpace(c.FormValue("title"))
+	slug := strings.TrimSpace(c.FormValue("slug"))
+	body := strings.TrimSpace(c.FormValue("body"))
+	publishStatus := c.FormValue("publish_status")
+	
+	// Validate required fields
+	if title == "" || slug == "" || body == "" {
+		return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+			"Title":          "New Article",
+			"NewArticlePage": true,
+			"Article": Article{
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": "Title, slug, and content are required",
+		}), "layouts/admin")
+	}
+	
+	// Validate slug format
+	if !isValidSlug(slug) {
+		return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "New Article",
+			"Article": Article{
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": "Slug must contain only lowercase letters, numbers, and hyphens",
+		}), "layouts/base")
+	}
+	
+	publish := publishStatus == "publish"
+	
+	article, err := a.CreateArticle(title, slug, body, user.ID, publish)
+	if err != nil {
+		log.Printf("Failed to create article: %v", err)
+		errorMsg := "Failed to create article"
+		if strings.Contains(err.Error(), "slug already exists") {
+			errorMsg = "A article with this slug already exists. Please choose a different slug."
+		}
+		
+		return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "New Article",
+			"Article": Article{
+				Title: title,
+				Slug:  slug,
+				Body:  body,
+			},
+			"Error": errorMsg,
+		}), "layouts/base")
+	}
+	
+	status := "draft"
+	if publish {
+		status = "published"
+	}
+	
+	log.Printf("Article created by %s: %s (%s)", user.EmailAddress, article.Title, status)
+	return c.Redirect("/admin/articles?success=" + "Article created successfully!")
+}
+
+// Update existing article
+func (a *App) UpdateArticleHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	articleID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	
+	title := strings.TrimSpace(c.FormValue("title"))
+	slug := strings.TrimSpace(c.FormValue("slug"))
+	body := strings.TrimSpace(c.FormValue("body"))
+	publishStatus := c.FormValue("publish_status")
+	
+	// Get original article for form repopulation on error
+	originalArticle, err := a.GetArticleByID(id)
+	if err != nil {
+		return fiber.ErrNotFound
+	}
+	
+	// Validate required fields
+	if title == "" || slug == "" || body == "" {
+		return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Article",
+			"Article": &Article{
+				Model:   originalArticle.Model,
+				Title:   title,
+				Slug:    slug,
+				Body:    body,
+				AuthorID: originalArticle.AuthorID,
+				Author:   originalArticle.Author,
+				PublishedAt: originalArticle.PublishedAt,
+			},
+			"Error": "Title, slug, and content are required",
+		}), "layouts/base")
+	}
+	
+	// Validate slug format
+	if !isValidSlug(slug) {
+		return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Article",
+			"Article": &Article{
+				Model:   originalArticle.Model,
+				Title:   title,
+				Slug:    slug,
+				Body:    body,
+				AuthorID: originalArticle.AuthorID,
+				Author:   originalArticle.Author,
+				PublishedAt: originalArticle.PublishedAt,
+			},
+			"Error": "Slug must contain only lowercase letters, numbers, and hyphens",
+		}), "layouts/base")
+	}
+	
+	publish := publishStatus == "publish"
+	
+	article, err := a.UpdateArticle(uint(articleID), title, slug, body, publish)
+	if err != nil {
+		log.Printf("Failed to update article: %v", err)
+		errorMsg := "Failed to update article"
+		if strings.Contains(err.Error(), "slug already exists") {
+			errorMsg = "A article with this slug already exists. Please choose a different slug."
+		}
+		
+		return c.Render("admin/article-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Article",
+			"Article": &Article{
+				Model:   originalArticle.Model,
+				Title:   title,
+				Slug:    slug,
+				Body:    body,
+				AuthorID: originalArticle.AuthorID,
+				Author:   originalArticle.Author,
+				PublishedAt: originalArticle.PublishedAt,
+			},
+			"Error": errorMsg,
+		}), "layouts/base")
+	}
+	
+	log.Printf("Article updated: %s", article.Title)
+	return c.Redirect("/admin/articles?success=" + "Article updated successfully!")
+}
+
+// Publish article
+func (a *App) PublishArticleHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	articleID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	
+	err = a.PublishArticle(uint(articleID))
+	if err != nil {
+		log.Printf("Failed to publish article: %v", err)
+		return c.Redirect("/admin/articles?error=" + "Failed to publish article")
+	}
+	
+	log.Printf("Article published: ID %d", articleID)
+	return c.Redirect("/admin/articles?success=" + "Article published successfully!")
+}
+
+// Unpublish article
+func (a *App) UnpublishArticleHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	articleID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	
+	err = a.UnpublishArticle(uint(articleID))
+	if err != nil {
+		log.Printf("Failed to unpublish article: %v", err)
+		return c.Redirect("/admin/articles?error=" + "Failed to unpublish article")
+	}
+	
+	log.Printf("Article unpublished: ID %d", articleID)
+	return c.Redirect("/admin/articles?success=" + "Article unpublished successfully!")
+}
+
+// Delete article
+func (a *App) DeleteArticleHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	articleID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	
+	err = a.DeleteArticle(uint(articleID))
+	if err != nil {
+		log.Printf("Failed to delete article: %v", err)
+		return c.Redirect("/admin/articles?error=" + "Failed to delete article")
+	}
+	
+	log.Printf("Article deleted: ID %d", articleID)
+	return c.Redirect("/admin/articles?success=" + "Article deleted successfully!")
+}
+
+// isValidSlug is now in validation.go

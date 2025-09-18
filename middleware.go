@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 )
 
 // Middleware to inject current user into all template contexts.
@@ -52,11 +53,14 @@ func (a *App) RedirectAfterLogin(c *fiber.Ctx) string {
 }
 
 func (a *App) CSRFMiddleware() fiber.Handler {
+	// Set secure cookies in production
+	cookieSecure := a.Config.Env != "Development"
+
 	return csrf.New(csrf.Config{
 		KeyLookup:         "form:_token",
 		CookieName:        "csrf_token",
 		CookieSameSite:    "Lax",
-		CookieSecure:      false,
+		CookieSecure:      cookieSecure,
 		CookieSessionOnly: true,
 		CookieHTTPOnly:    true,
 		Expiration:        24 * time.Hour,
@@ -80,4 +84,39 @@ func (a *App) RequireAdmin(c *fiber.Ctx) error {
 		}, "layouts/base")
 	}
 	return c.Next()
+}
+
+// AuthRateLimiter provides rate limiting for authentication endpoints
+func (a *App) AuthRateLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:        5,                     // 5 attempts
+		Expiration: 15 * time.Minute,     // per 15 minutes
+		KeyGenerator: func(c *fiber.Ctx) string {
+			// Rate limit by IP address
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(429).Render("errors/rate-limit", fiber.Map{
+				"Title": "Too Many Attempts",
+				"Error": "Too many login attempts. Please try again in 15 minutes.",
+			}, "layouts/base")
+		},
+	})
+}
+
+// PasswordResetRateLimiter provides stricter rate limiting for password reset
+func (a *App) PasswordResetRateLimiter() fiber.Handler {
+	return limiter.New(limiter.Config{
+		Max:        3,                     // 3 attempts
+		Expiration: 60 * time.Minute,     // per hour
+		KeyGenerator: func(c *fiber.Ctx) string {
+			return c.IP()
+		},
+		LimitReached: func(c *fiber.Ctx) error {
+			return c.Status(429).Render("errors/rate-limit", fiber.Map{
+				"Title": "Too Many Password Reset Attempts",
+				"Error": "Too many password reset attempts. Please try again in 1 hour.",
+			}, "layouts/base")
+		},
+	})
 }

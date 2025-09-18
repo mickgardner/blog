@@ -1,14 +1,12 @@
 package main
 
 import (
-	"crypto/rand"
 	"errors"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/session"
 	"github.com/gofiber/storage/redis/v3"
 	"golang.org/x/crypto/bcrypt"
-	"log"
-	"math/big"
+	"gorm.io/gorm"
 	"strconv"
 	"time"
 )
@@ -31,18 +29,7 @@ type PasswordResetToken struct {
 	UpdatedAt time.Time
 }
 
-// Generate a cryptographically secure 6-digit code
-func GenerateSecureCode() string {
-	const digits = "0123456789"
-	code := make([]byte, 6)
-
-	for i := range code {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(digits))))
-		code[i] = digits[num.Int64()]
-	}
-
-	return string(code)
-}
+// GenerateSecureCode is now in utils.go
 
 // HashPassword creates a bcrypt hash of the password
 func HashPassword(password string) (string, error) {
@@ -77,14 +64,27 @@ func (a *App) CreateVerificationCode(email string) (*VerificationCode, error) {
 func (a *App) VerifyCode(email, inputCode string) (*VerificationCode, error) {
 	var verification VerificationCode
 
-	err := a.DB.Where("email = ? AND code = ? AND used = ? AND expires_at > ?", email, inputCode, false, time.Now()).First(&verification).Error
+	// Use transaction to ensure atomicity
+	err := a.DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Where("email = ? AND code = ? AND used = ? AND expires_at > ?", email, inputCode, false, time.Now()).First(&verification).Error
+		if err != nil {
+			// we didn't find the code or it has expired.
+			return err
+		}
+
+		// Mark code as used
+		verification.Used = true
+		err = tx.Save(&verification).Error
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
 	if err != nil {
-		// we didn't find the code or it has expired.
 		return nil, err
 	}
-
-	verification.Used = true
-	a.DB.Save(&verification)
 
 	return &verification, nil
 }
@@ -97,18 +97,7 @@ func (a *App) CleanupExpiredTokens() {
 	a.DB.Where("expires_at < ?", time.Now()).Delete(&PasswordResetToken{})
 }
 
-// GenerateSecureToken creates a secure random token for password reset
-func GenerateSecureToken(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	token := make([]byte, length)
-
-	for i := range token {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		token[i] = charset[num.Int64()]
-	}
-
-	return string(token)
-}
+// GenerateSecureToken is now in utils.go
 
 func (a *App) CreatePasswordResetToken(email string) (*PasswordResetToken, error) {
 	// Check if user exists and is active
@@ -150,36 +139,56 @@ func (a *App) ValidatePasswordResetToken(token string) (*PasswordResetToken, err
 }
 
 func (a *App) ResetPassword(token, newPassword string) error {
-	// Validate token
-	resetToken, err := a.ValidatePasswordResetToken(token)
-	if err != nil {
-		return errors.New("invalid or expired token")
-	}
+	// Use transaction to ensure atomicity
+	return a.DB.Transaction(func(tx *gorm.DB) error {
+		// Validate token within transaction
+		resetToken, err := a.validatePasswordResetTokenInTx(tx, token)
+		if err != nil {
+			return errors.New("invalid or expired token")
+		}
 
-	// Get user
-	user, err := a.GetUserByEmail(resetToken.Email)
-	if err != nil {
-		return errors.New("user not found")
-	}
+		// Get user within transaction
+		user, err := a.getUserByEmailInTx(tx, resetToken.Email)
+		if err != nil {
+			return errors.New("user not found")
+		}
 
-	// Hash new password
-	passwordHash, err := HashPassword(newPassword)
-	if err != nil {
-		return err
-	}
+		// Hash new password
+		passwordHash, err := HashPassword(newPassword)
+		if err != nil {
+			return err
+		}
 
-	// Update user password
-	user.PasswordHash = passwordHash
-	err = a.DB.Save(user).Error
-	if err != nil {
-		return err
-	}
+		// Update user password
+		user.PasswordHash = passwordHash
+		err = tx.Save(user).Error
+		if err != nil {
+			return err
+		}
 
-	// Mark token as used
-	resetToken.Used = true
-	a.DB.Save(&resetToken)
+		// Mark token as used
+		resetToken.Used = true
+		err = tx.Save(&resetToken).Error
+		if err != nil {
+			return err
+		}
 
-	return nil
+		return nil
+	})
+}
+
+// validatePasswordResetTokenInTx validates password reset token within a transaction
+func (a *App) validatePasswordResetTokenInTx(tx *gorm.DB, token string) (*PasswordResetToken, error) {
+	var resetToken PasswordResetToken
+	err := tx.Where("token = ? AND used = ? AND expires_at > ?", token, false, time.Now()).First(&resetToken).Error
+	return &resetToken, err
+}
+
+// getUserByEmailInTx gets user by email within a transaction
+func (a *App) getUserByEmailInTx(tx *gorm.DB, email string) (*User, error) {
+	var user User
+	err := tx.Where("email_address = ?", email).First(&user).Error
+	return &user, err
 }
 
 // SESSION MANAGEMENT
@@ -209,15 +218,18 @@ func (a *App) SetupSessions() {
 		Reset:    false,
 	})
 
+	// Set secure cookies in production
+	cookieSecure := a.Config.Env != "Development"
+
 	a.SessionStore = session.New(session.Config{
 		Storage:        storage,
 		KeyLookup:      "cookie:session_id",
-		CookieSecure:   false,
+		CookieSecure:   cookieSecure,
 		CookieHTTPOnly: true,
 		Expiration:     24 * time.Hour,
 	})
 
-	log.Println("Session store configuration with Redis")
+	LogDB().Info("Session store configured with Redis")
 }
 
 func (a *App) CreateUserSession(c *fiber.Ctx, user *User) error {
@@ -231,8 +243,8 @@ func (a *App) CreateUserSession(c *fiber.Ctx, user *User) error {
 	sess.Set("authenticated", true)
 
 	// Update users last login time.
-	user.LastLoginAt = &time.Time{}
-	*user.LastLoginAt = time.Now()
+	now := time.Now()
+	user.LastLoginAt = &now
 	a.DB.Save(user)
 
 	return sess.Save()

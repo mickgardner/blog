@@ -10,6 +10,7 @@ type Config struct {
 	Env              string
 	DBName           string
 	Version          string
+	BaseURL          string // Base URL for the application (e.g., https://blog.example.com)
 	RedisURL         string
 	RedisPort        string
 	RedisPassword    string
@@ -29,15 +30,22 @@ type Config struct {
 }
 
 func LoadConfig() Config {
+	// Use basic logging here since structured logger isn't initialized yet
 	log.Println("Loading Configuration...")
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:3000" // Default for development
+	}
+
 	config := Config{
 		Env:              os.Getenv("ENV"),
 		DBName:           os.Getenv("DBNAME"),
 		Version:          os.Getenv("VERSION"),
+		BaseURL:          baseURL,
 		RedisURL:         os.Getenv("REDIS_URL"),
 		RedisPort:        os.Getenv("REDIS_PORT"),
 		RedisPassword:    os.Getenv("REDIS_PASSWORD"),
@@ -55,6 +63,8 @@ func LoadConfig() Config {
 		MailgunFromName:  os.Getenv("MAILGUN_FROM_NAME"),
 		AdminEmail:       os.Getenv("ADMIN_EMAIL"),
 	}
-	log.Println(config)
+	// Log safe configuration info only (structured logging not yet available)
+	log.Printf("Configuration loaded: ENV=%s, VERSION=%s, EMAIL_SERVICE=%s",
+		config.Env, config.Version, config.EmailService)
 	return config
 }

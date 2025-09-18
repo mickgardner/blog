@@ -1,0 +1,592 @@
+<div class="article-form-page">
+  <header class="form-header">
+    <nav class="breadcrumb">
+      <a href="/">Home</a> <span>›</span> 
+      <a href="/dashboard">Dashboard</a> <span>›</span> 
+      <a href="/admin/articles">Articles</a> <span>›</span> 
+      <span>{{ Article.ID|yesno:"Edit,New" }} Article</span>
+    </nav>
+    
+    <div class="header-content">
+      <h1 class="page-title">
+        {% if Article.ID %}
+        Edit Article
+        {% else %}
+        Create New Article
+        {% endif %}
+      </h1>
+    </div>
+  </header>
+
+  <main class="form-content">
+    {% if Success %}
+    <div class="alert alert-success">
+      {{ Success }}
+    </div>
+    {% endif %}
+
+    {% if Error %}
+    <div class="alert alert-error">
+      {{ Error }}
+    </div>
+    {% endif %}
+
+    <form action="/admin/articles/{% if Article.ID %}{{ Article.ID }}/update{% else %}create{% endif %}" method="POST" class="article-form">
+      <input type="hidden" name="_token" value="{{ csrf_token }}">
+      
+      <div class="form-sections">
+        <section class="form-section">
+          <h2 class="section-title">Article Details</h2>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="title" class="form-label">Title *</label>
+              <input 
+                type="text" 
+                id="title" 
+                name="title" 
+                value="{{ Article.Title }}" 
+                class="form-input" 
+                required
+                placeholder="Enter article title"
+              >
+              <p class="form-help">This will be displayed as the main headline</p>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="slug" class="form-label">URL Slug *</label>
+              <div class="slug-input-group">
+                <span class="slug-prefix">/article/</span>
+                <input 
+                  type="text" 
+                  id="slug" 
+                  name="slug" 
+                  value="{{ Article.Slug }}" 
+                  class="form-input slug-input" 
+                  required
+                  placeholder="article-url-slug"
+                  pattern="[a-z0-9-]+"
+                >
+              </div>
+              <p class="form-help">Lowercase letters, numbers, and hyphens only. Must be unique.</p>
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="body" class="form-label">Content *</label>
+              <textarea 
+                id="body" 
+                name="body" 
+                class="form-textarea" 
+                required
+                rows="15"
+                placeholder="Write your article content here..."
+              >{{ Article.Body }}</textarea>
+              <p class="form-help">Write your article content using plain text or basic HTML</p>
+            </div>
+          </div>
+        </section>
+        
+        <section class="form-section">
+          <h2 class="section-title">Publishing</h2>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Publication Status</label>
+              <div class="radio-group">
+                <label class="radio-option">
+                  <input 
+                    type="radio" 
+                    name="publish_status" 
+                    value="draft" 
+                    {% if not Article.IsPublished %}checked{% endif %}
+                  >
+                  <span class="radio-indicator"></span>
+                  <span class="radio-label">Save as Draft</span>
+                  <small class="radio-help">Article won't be visible to visitors</small>
+                </label>
+                
+                <label class="radio-option">
+                  <input 
+                    type="radio" 
+                    name="publish_status" 
+                    value="publish" 
+                    {% if Article.IsPublished %}checked{% endif %}
+                  >
+                  <span class="radio-indicator"></span>
+                  <span class="radio-label">Publish Now</span>
+                  <small class="radio-help">Article will be visible to all visitors</small>
+                </label>
+              </div>
+            </div>
+          </div>
+          
+          {% if Article.ID %}
+          <div class="form-row">
+            <div class="article-meta">
+              <div class="meta-item">
+                <span class="meta-label">Created:</span>
+                <span class="meta-value">{{ Article.GetFormattedCreatedAt }}</span>
+              </div>
+              <div class="meta-item">
+                <span class="meta-label">Last Modified:</span>
+                <span class="meta-value">{{ Article.GetFormattedUpdatedAt }}</span>
+              </div>
+              {% if Article.PublishedAt %}
+              <div class="meta-item">
+                <span class="meta-label">Published:</span>
+                <span class="meta-value">{{ Article.GetFormattedPublishedAt }}</span>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </section>
+      </div>
+      
+      <div class="form-actions">
+        <div class="action-group">
+          <button type="submit" class="btn btn-primary">
+            {% if Article.ID %}
+            Update Article
+            {% else %}
+            Create Article
+            {% endif %}
+          </button>
+          
+          {% if Article.ID %}
+          <a href="/article/{{ Article.Slug }}" class="btn btn-secondary" target="_blank">
+            Preview Article
+          </a>
+          {% endif %}
+          
+          <a href="/admin/articles" class="btn btn-outline">
+            Cancel
+          </a>
+        </div>
+        
+        {% if Article.ID %}
+        <div class="danger-actions">
+          <form action="/admin/articles/{{ Article.ID }}/delete" method="POST" class="inline-form" onsubmit="return confirm('Are you sure you want to delete this article? This action cannot be undone.')">
+            <input type="hidden" name="_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-danger">
+              Delete Article
+            </button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
+    </form>
+  </main>
+</div>
+
+<script>
+  // Auto-generate slug from title
+  document.getElementById('title').addEventListener('input', function() {
+    const title = this.value;
+    const slug = title
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim();
+    
+    const slugInput = document.getElementById('slug');
+    if (slugInput.value === '' || slugInput.getAttribute('data-auto-generated') === 'true') {
+      slugInput.value = slug;
+      slugInput.setAttribute('data-auto-generated', 'true');
+    }
+  });
+  
+  // Mark slug as manually edited
+  document.getElementById('slug').addEventListener('input', function() {
+    this.setAttribute('data-auto-generated', 'false');
+  });
+</script>
+
+<style>
+  .article-form-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+  
+  .form-header {
+    padding: 20px 0 40px;
+  }
+  
+  .breadcrumb {
+    padding: 20px 0;
+    font-size: 0.9rem;
+    color: #6b7280;
+    margin-bottom: 20px;
+  }
+  
+  .breadcrumb a {
+    color: #667eea;
+    text-decoration: none;
+    transition: color 0.3s ease;
+  }
+  
+  .breadcrumb a:hover {
+    color: #5a67d8;
+  }
+  
+  .breadcrumb span {
+    margin: 0 8px;
+  }
+  
+  .header-content {
+    text-align: center;
+    padding: 40px 32px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    margin-bottom: 40px;
+  }
+  
+  .page-title {
+    font-size: 2.25rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.02em;
+  }
+  
+  .alert {
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    font-weight: 500;
+  }
+  
+  .alert-success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+  
+  .alert-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+  
+  .article-form {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+  }
+  
+  .form-sections {
+    padding: 32px;
+  }
+  
+  .form-section {
+    margin-bottom: 40px;
+  }
+  
+  .form-section:last-child {
+    margin-bottom: 0;
+  }
+  
+  .section-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 24px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #f3f4f6;
+  }
+  
+  .form-row {
+    margin-bottom: 24px;
+  }
+  
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .form-label {
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+  }
+  
+  .form-input {
+    padding: 12px 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .form-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+  
+  .slug-input-group {
+    display: flex;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .slug-input-group:focus-within {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+  
+  .slug-prefix {
+    padding: 12px 16px;
+    background: #f9fafb;
+    color: #6b7280;
+    border-right: 1px solid #e5e7eb;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+  }
+  
+  .slug-input {
+    border: none;
+    border-radius: 0;
+    flex: 1;
+    font-family: 'Monaco', 'Menlo', monospace;
+  }
+  
+  .slug-input:focus {
+    box-shadow: none;
+    border-color: transparent;
+  }
+  
+  .form-textarea {
+    padding: 16px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 300px;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+  
+  .form-textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+  
+  .form-help {
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin: 8px 0 0;
+  }
+  
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .radio-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    cursor: pointer;
+    padding: 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+  }
+  
+  .radio-option:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+  }
+  
+  .radio-option input[type="radio"] {
+    display: none;
+  }
+  
+  .radio-indicator {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #d1d5db;
+    border-radius: 50%;
+    position: relative;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+  }
+  
+  .radio-option input[type="radio"]:checked + .radio-indicator {
+    border-color: #667eea;
+    background: #667eea;
+  }
+  
+  .radio-option input[type="radio"]:checked + .radio-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    background: white;
+    border-radius: 50%;
+  }
+  
+  .radio-label {
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 4px;
+  }
+  
+  .radio-help {
+    color: #6b7280;
+    font-size: 0.875rem;
+    display: block;
+  }
+  
+  .article-meta {
+    background: #f9fafb;
+    padding: 20px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .meta-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .meta-label {
+    font-weight: 500;
+    color: #6b7280;
+  }
+  
+  .meta-value {
+    color: #374151;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9rem;
+  }
+  
+  .form-actions {
+    padding: 24px 32px;
+    background: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .action-group {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  
+  .btn {
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 1rem;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    display: inline-block;
+  }
+  
+  .btn-primary {
+    background: #667eea;
+    color: white;
+  }
+  
+  .btn-primary:hover {
+    background: #5a67d8;
+  }
+  
+  .btn-secondary {
+    background: #6b7280;
+    color: white;
+  }
+  
+  .btn-secondary:hover {
+    background: #4b5563;
+  }
+  
+  .btn-outline {
+    background: transparent;
+    color: #6b7280;
+    border: 1px solid #d1d5db;
+  }
+  
+  .btn-outline:hover {
+    background: #f9fafb;
+    color: #374151;
+  }
+  
+  .btn-danger {
+    background: #ef4444;
+    color: white;
+  }
+  
+  .btn-danger:hover {
+    background: #dc2626;
+  }
+  
+  .inline-form {
+    display: inline;
+  }
+  
+  @media (max-width: 768px) {
+    .header-content {
+      padding: 24px 20px;
+    }
+    
+    .page-title {
+      font-size: 1.75rem;
+    }
+    
+    .form-sections {
+      padding: 20px;
+    }
+    
+    .form-actions {
+      padding: 20px;
+      flex-direction: column;
+      gap: 16px;
+      align-items: stretch;
+    }
+    
+    .action-group {
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .btn {
+      text-align: center;
+    }
+    
+    .slug-input-group {
+      flex-direction: column;
+    }
+    
+    .slug-prefix {
+      border-right: none;
+      border-bottom: 1px solid #e5e7eb;
+    }
+  }
+</style>

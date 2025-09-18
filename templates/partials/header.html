@@ -8,18 +8,38 @@
       <ul class="nav-links">
         <li><a href="/" class="nav-link">Home</a></li>
         <li><a href="/about" class="nav-link">About</a></li>
-        {% if User %}
-        <li><a href="/dashboard" class="nav-link">Dashboard</a></li>
-        <li><a href="/profile" class="nav-link">Profile</a></li>
-        {% if User.IsAdmin %}
-        <li><a href="/admin/invite" class="nav-link">Invite Users</a></li>
-        {% endif %}
-        <li><a href="/logout" class="nav-link logout-link">Logout</a></li>
-        {% else %}
-        <li><a href="/login" class="nav-link login-link">Login</a></li>
-        {% endif %}
       </ul>
     </nav>
+    
+    <div class="header-actions">
+      {% if User %}
+      {% if User.IsAdmin %}
+      <a href="/admin" class="admin-link" title="Admin Dashboard">
+        <span class="admin-icon">⚙️</span>
+        Admin
+      </a>
+      {% endif %}
+      <div class="user-menu">
+        <button class="user-menu-toggle" aria-label="User menu">
+          <div class="user-avatar">{{ User.FullName|first|upper }}</div>
+          <span class="user-name">{{ User.FullName }}</span>
+          <span class="dropdown-arrow">▼</span>
+        </button>
+        <div class="user-dropdown">
+          <a href="/profile" class="dropdown-link">
+            <span class="dropdown-icon">👤</span>
+            Profile
+          </a>
+          <a href="/logout" class="dropdown-link logout-link">
+            <span class="dropdown-icon">🚪</span>
+            Logout
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <a href="/login" class="login-btn">Login</a>
+      {% endif %}
+    </div>
     
     <button class="mobile-menu-toggle" aria-label="Toggle mobile menu">
       <span></span>
@@ -44,9 +64,9 @@
     margin: 0 auto;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 0 20px;
     height: 64px;
+    gap: 20px;
   }
   
   .brand {
@@ -67,8 +87,6 @@
   
   .main-nav {
     flex: 1;
-    display: flex;
-    justify-content: center;
   }
   
   .nav-links {
@@ -76,7 +94,7 @@
     list-style: none;
     margin: 0;
     padding: 0;
-    gap: 32px;
+    gap: 24px;
     align-items: center;
   }
   
@@ -88,7 +106,6 @@
     padding: 8px 16px;
     border-radius: 6px;
     transition: all 0.3s ease;
-    position: relative;
   }
   
   .nav-link:hover {
@@ -96,23 +113,151 @@
     background: #f9fafb;
   }
   
-  .nav-link.login-link {
+  /* Header Actions */
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  
+  .admin-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.9rem;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .admin-link:hover {
+    background: #f0f4ff;
+    border-color: #667eea;
+  }
+  
+  .admin-icon {
+    font-size: 1rem;
+  }
+  
+  .login-btn {
     background: #667eea;
     color: white;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    padding: 10px 20px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
   }
   
-  .nav-link.login-link:hover {
+  .login-btn:hover {
     background: #5a67d8;
+  }
+  
+  /* User Menu */
+  .user-menu {
+    position: relative;
+  }
+  
+  .user-menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+  }
+  
+  .user-menu-toggle:hover {
+    background: #f9fafb;
+  }
+  
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    background: #667eea;
     color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
   }
   
-  .nav-link.logout-link {
+  .user-name {
+    font-weight: 500;
+    color: #374151;
+    font-size: 0.9rem;
+  }
+  
+  .dropdown-arrow {
+    font-size: 0.7rem;
+    color: #9ca3af;
+    transition: transform 0.3s ease;
+  }
+  
+  .user-menu.open .dropdown-arrow {
+    transform: rotate(180deg);
+  }
+  
+  .user-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+    min-width: 180px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+    z-index: 1000;
+  }
+  
+  .user-menu.open .user-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+  
+  .dropdown-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    color: #374151;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+  }
+  
+  .dropdown-link:hover {
+    background: #f9fafb;
+  }
+  
+  .dropdown-link.logout-link {
     color: #dc2626;
+    border-top: 1px solid #f3f4f6;
   }
   
-  .nav-link.logout-link:hover {
+  .dropdown-link.logout-link:hover {
     background: #fef2f2;
-    color: #b91c1c;
+  }
+  
+  .dropdown-icon {
+    font-size: 1rem;
+    width: 16px;
+    text-align: center;
   }
   
   .mobile-menu-toggle {
@@ -149,6 +294,14 @@
     .brand-link {
       font-size: 1.25rem;
     }
+    
+    .user-name {
+      display: none;
+    }
+    
+    .admin-link span:not(.admin-icon) {
+      display: none;
+    }
   }
   
   /* Active page styling */
@@ -162,3 +315,33 @@
     background: #e0e7ff;
   }
 </style>
+
+<script>
+  // User menu dropdown functionality
+  document.addEventListener('DOMContentLoaded', function() {
+    const userMenuToggle = document.querySelector('.user-menu-toggle');
+    const userMenu = document.querySelector('.user-menu');
+    
+    if (userMenuToggle && userMenu) {
+      userMenuToggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        userMenu.classList.toggle('open');
+      });
+      
+      // Close dropdown when clicking outside
+      document.addEventListener('click', function(e) {
+        if (!userMenu.contains(e.target)) {
+          userMenu.classList.remove('open');
+        }
+      });
+      
+      // Close dropdown on escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          userMenu.classList.remove('open');
+        }
+      });
+    }
+  });
+</script>
