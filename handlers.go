@@ -1,8 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"html/template"
+	"io"
 	"log"
+	"mime/multipart"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -44,10 +50,31 @@ func (a *App) ArticleHandler(c *fiber.Ctx) error {
 		}).Warn("Article not found")
 		return fiber.ErrNotFound
 	}
+
+	// Convert markdown body to HTML
+	renderedBody, err := MarkdownToHTML(article.Body)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"slug": slug,
+			"error": err.Error(),
+		}).Error("Failed to render markdown")
+		// Fallback to raw body if markdown rendering fails
+		renderedBody = template.HTML(article.Body)
+	}
+
+	// Create a template-friendly version with rendered HTML
+	templateArticle := struct {
+		*Article
+		RenderedBody template.HTML
+	}{
+		Article:      article,
+		RenderedBody: renderedBody,
+	}
+
 	return c.Render("article", a.GetTemplateData(c, fiber.Map{
 		"Title":   "<blog keywords and title>",
 		"Message": "Blog Article",
-		"Article": article,
+		"Article": templateArticle,
 	}), "layouts/base")
 }
 
@@ -985,6 +1012,120 @@ func (a *App) DeleteArticleHandler(c *fiber.Ctx) error {
 	
 	log.Printf("Article deleted: ID %d", articleID)
 	return c.Redirect("/admin/articles?success=" + "Article deleted successfully!")
+}
+
+// Image upload handler for Markdown editor
+func (a *App) UploadImageHandler(c *fiber.Ctx) error {
+	// Check if user is authenticated and admin
+	user, err := a.GetCurrentUser(c)
+	if err != nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Authentication required",
+		})
+	}
+
+	if !user.IsAdmin {
+		return c.Status(403).JSON(fiber.Map{
+			"error": "Admin access required",
+		})
+	}
+
+	// Parse multipart form
+	file, err := c.FormFile("image")
+	if err != nil {
+		LogHTTP().WithError(err).Error("Failed to parse uploaded file")
+		return c.Status(400).JSON(fiber.Map{
+			"error": "No image file provided",
+		})
+	}
+
+	// Validate file type
+	if !isValidImageType(file.Header.Get("Content-Type")) {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid file type. Only JPEG, PNG, GIF, and WebP images are allowed",
+		})
+	}
+
+	// Validate file size (max 5MB)
+	maxSize := int64(5 * 1024 * 1024) // 5MB
+	if file.Size > maxSize {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "File too large. Maximum size is 5MB",
+		})
+	}
+
+	// Generate unique filename
+	ext := filepath.Ext(file.Filename)
+	filename := fmt.Sprintf("%d%s", time.Now().UnixNano(), ext)
+
+	// Create upload directory if it doesn't exist
+	uploadDir := filepath.Join("static", "uploads")
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		LogHTTP().WithError(err).Error("Failed to create upload directory")
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to create upload directory",
+		})
+	}
+
+	// Save file
+	filepath := filepath.Join(uploadDir, filename)
+	if err := saveUploadedFile(file, filepath); err != nil {
+		LogHTTP().WithError(err).Error("Failed to save uploaded file")
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to save image",
+		})
+	}
+
+	// Return success response with image URL
+	imageURL := fmt.Sprintf("/static/uploads/%s", filename)
+
+	LogHTTP().WithFields(map[string]interface{}{
+		"user": SanitizeEmail(user.EmailAddress),
+		"filename": filename,
+		"size": file.Size,
+	}).Info("Image uploaded successfully")
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"url":     imageURL,
+		"filename": filename,
+	})
+}
+
+// Helper function to validate image MIME types
+func isValidImageType(contentType string) bool {
+	validTypes := []string{
+		"image/jpeg",
+		"image/jpg",
+		"image/png",
+		"image/gif",
+		"image/webp",
+	}
+
+	for _, validType := range validTypes {
+		if contentType == validType {
+			return true
+		}
+	}
+	return false
+}
+
+// Helper function to save uploaded file
+func saveUploadedFile(file *multipart.FileHeader, dst string) error {
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, src)
+	return err
 }
 
 // isValidSlug is now in validation.go

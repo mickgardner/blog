@@ -99,4 +99,7 @@ func (a *App) DefineRoutes() {
 	// Admin - User management
 	a.Router.Get("/admin/invite", a.RequireAuth, a.RequireAdmin, a.InviteFormHandler)
 	a.Router.Post("/admin/invite", a.RequireAuth, a.RequireAdmin, a.SendInviteHandler)
+
+	// Image upload for Markdown editor
+	a.Router.Post("/admin/upload-image", a.RequireAuth, a.RequireAdmin, a.UploadImageHandler)
 }

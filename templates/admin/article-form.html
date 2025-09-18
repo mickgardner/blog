@@ -76,16 +76,125 @@
           
           <div class="form-row">
             <div class="form-group">
-              <label for="body" class="form-label">Content *</label>
-              <textarea 
-                id="body" 
-                name="body" 
-                class="form-textarea" 
-                required
-                rows="15"
-                placeholder="Write your article content here..."
-              >{{ Article.Body }}</textarea>
-              <p class="form-help">Write your article content using plain text or basic HTML</p>
+              <label for="body" class="form-label">Content *
+                <span class="markdown-badge">Markdown Supported</span>
+              </label>
+
+              <div class="markdown-editor">
+                <div class="markdown-toolbar">
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('**', '**')" title="Bold">
+                    <strong>B</strong>
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('*', '*')" title="Italic">
+                    <em>I</em>
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('~~', '~~')" title="Strikethrough">
+                    <s>S</s>
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('# ', '')" title="Heading 1">
+                    H1
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('## ', '')" title="Heading 2">
+                    H2
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('### ', '')" title="Heading 3">
+                    H3
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('- ', '')" title="Bullet List">
+                    • List
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('1. ', '')" title="Numbered List">
+                    1. List
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('> ', '')" title="Quote">
+                    Quote
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('`', '`')" title="Inline Code">
+                    Code
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('```\n', '\n```')" title="Code Block">
+                    Block
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="insertMarkdown('[Link Text](', ')')" title="Link">
+                    Link
+                  </button>
+                  <button type="button" class="toolbar-btn" onclick="showImageUpload()" title="Upload Image">
+                    📷 Upload
+                  </button>
+                  <div class="toolbar-separator"></div>
+                  <button type="button" class="toolbar-btn preview-toggle" onclick="togglePreview()" title="Toggle Preview">
+                    👁️ Preview
+                  </button>
+                  <input type="file" id="image-upload" accept="image/*" style="display: none;" onchange="handleImageUpload(this)">
+                </div>
+
+                <div class="editor-container">
+                  <textarea
+                    id="body"
+                    name="body"
+                    class="form-textarea markdown-textarea"
+                    required
+                    rows="15"
+                    placeholder="Write your article content here using Markdown..."
+                  >{{ Article.Body }}</textarea>
+
+                  <div id="preview-pane" class="preview-pane" style="display: none;">
+                    <div class="preview-content" id="preview-content">
+                      <p class="preview-placeholder">Preview will appear here...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="markdown-help">
+                <p class="form-help">
+                  Write your article content using <strong>Markdown</strong>.
+                  <a href="#" onclick="toggleMarkdownGuide(); return false;" class="markdown-guide-toggle">
+                    Show Markdown Guide
+                  </a>
+                </p>
+
+                <div id="markdown-guide" class="markdown-guide" style="display: none;">
+                  <h4>Markdown Quick Reference</h4>
+                  <div class="guide-grid">
+                    <div class="guide-item">
+                      <strong>Headers:</strong>
+                      <code># H1, ## H2, ### H3</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Emphasis:</strong>
+                      <code>**bold**, *italic*, ~~strikethrough~~</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Lists:</strong>
+                      <code>- item or 1. item</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Links:</strong>
+                      <code>[text](url)</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Images:</strong>
+                      <code>![alt](image-url)</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Code:</strong>
+                      <code>`inline` or ```block```</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Quotes:</strong>
+                      <code>> quoted text</code>
+                    </div>
+                    <div class="guide-item">
+                      <strong>Tables:</strong>
+                      <code>| Col1 | Col2 |<br>|------|------|<br>| Data | Data |</code>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -193,18 +302,281 @@
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .trim();
-    
+
     const slugInput = document.getElementById('slug');
     if (slugInput.value === '' || slugInput.getAttribute('data-auto-generated') === 'true') {
       slugInput.value = slug;
       slugInput.setAttribute('data-auto-generated', 'true');
     }
   });
-  
+
   // Mark slug as manually edited
   document.getElementById('slug').addEventListener('input', function() {
     this.setAttribute('data-auto-generated', 'false');
   });
+
+  // Markdown editor functions
+  function insertMarkdown(before, after) {
+    const textarea = document.getElementById('body');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+
+    const replacement = before + selectedText + after;
+
+    textarea.value = textarea.value.substring(0, start) + replacement + textarea.value.substring(end);
+
+    // Set cursor position
+    const newCursorPos = start + before.length + selectedText.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+  }
+
+  function toggleMarkdownGuide() {
+    const guide = document.getElementById('markdown-guide');
+    const toggle = document.querySelector('.markdown-guide-toggle');
+
+    if (guide.style.display === 'none') {
+      guide.style.display = 'block';
+      toggle.textContent = 'Hide Markdown Guide';
+    } else {
+      guide.style.display = 'none';
+      toggle.textContent = 'Show Markdown Guide';
+    }
+  }
+
+  // Keyboard shortcuts for common markdown formatting
+  document.getElementById('body').addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+      switch(e.key) {
+        case 'b':
+          e.preventDefault();
+          insertMarkdown('**', '**');
+          break;
+        case 'i':
+          e.preventDefault();
+          insertMarkdown('*', '*');
+          break;
+        case 'k':
+          e.preventDefault();
+          insertMarkdown('[', '](url)');
+          break;
+      }
+    }
+  });
+
+  // Image upload functions
+  function showImageUpload() {
+    document.getElementById('image-upload').click();
+  }
+
+  function handleImageUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image size must be less than 5MB');
+      return;
+    }
+
+    // Show upload progress
+    const uploadBtn = document.querySelector('[onclick="showImageUpload()"]');
+    const originalText = uploadBtn.innerHTML;
+    uploadBtn.innerHTML = '⏳ Uploading...';
+    uploadBtn.disabled = true;
+
+    // Create FormData
+    const formData = new FormData();
+    formData.append('image', file);
+
+    // Upload the image
+    fetch('/admin/upload-image', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        // Include CSRF token if needed
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        // Insert markdown image syntax
+        const altText = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+        const markdownText = `![${altText}](${data.url})`;
+        insertMarkdownText(markdownText);
+
+        // Show success message
+        showUploadMessage('Image uploaded successfully!', 'success');
+      } else {
+        showUploadMessage(data.error || 'Upload failed', 'error');
+      }
+    })
+    .catch(error => {
+      console.error('Upload error:', error);
+      showUploadMessage('Upload failed. Please try again.', 'error');
+    })
+    .finally(() => {
+      // Restore button
+      uploadBtn.innerHTML = originalText;
+      uploadBtn.disabled = false;
+
+      // Clear file input
+      input.value = '';
+    });
+  }
+
+  function insertMarkdownText(text) {
+    const textarea = document.getElementById('body');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+
+    textarea.value = textarea.value.substring(0, start) + text + textarea.value.substring(end);
+
+    // Set cursor position after inserted text
+    const newCursorPos = start + text.length;
+    textarea.setSelectionRange(newCursorPos, newCursorPos);
+    textarea.focus();
+  }
+
+  function showUploadMessage(message, type) {
+    // Create message element
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `upload-message upload-${type}`;
+    messageDiv.textContent = message;
+
+    // Insert after markdown toolbar
+    const toolbar = document.querySelector('.markdown-toolbar');
+    toolbar.parentNode.insertBefore(messageDiv, toolbar.nextSibling);
+
+    // Remove message after 3 seconds
+    setTimeout(() => {
+      if (messageDiv.parentNode) {
+        messageDiv.parentNode.removeChild(messageDiv);
+      }
+    }, 3000);
+  }
+
+  // Preview functionality
+  let previewMode = false;
+  let previewUpdateTimeout;
+
+  function togglePreview() {
+    const previewPane = document.getElementById('preview-pane');
+    const textarea = document.getElementById('body');
+    const container = document.querySelector('.editor-container');
+    const previewBtn = document.querySelector('.preview-toggle');
+
+    previewMode = !previewMode;
+
+    if (previewMode) {
+      // Show side-by-side preview
+      previewPane.style.display = 'block';
+      container.classList.add('split-view');
+      previewBtn.innerHTML = '📝 Edit';
+      previewBtn.title = 'Hide Preview';
+
+      // Initial preview render
+      updatePreview();
+
+      // Set up live preview updates
+      textarea.addEventListener('input', debouncePreviewUpdate);
+    } else {
+      // Hide preview
+      previewPane.style.display = 'none';
+      container.classList.remove('split-view');
+      previewBtn.innerHTML = '👁️ Preview';
+      previewBtn.title = 'Toggle Preview';
+
+      // Remove live preview updates
+      textarea.removeEventListener('input', debouncePreviewUpdate);
+    }
+  }
+
+  function debouncePreviewUpdate() {
+    clearTimeout(previewUpdateTimeout);
+    previewUpdateTimeout = setTimeout(updatePreview, 300); // 300ms delay
+  }
+
+  function updatePreview() {
+    const textarea = document.getElementById('body');
+    const previewContent = document.getElementById('preview-content');
+    const markdownText = textarea.value;
+
+    if (!markdownText.trim()) {
+      previewContent.innerHTML = '<p class="preview-placeholder">Preview will appear here...</p>';
+      return;
+    }
+
+    // Convert markdown to HTML (basic client-side conversion)
+    const htmlContent = convertMarkdownToHTML(markdownText);
+    previewContent.innerHTML = htmlContent;
+  }
+
+  // Basic client-side markdown to HTML conversion
+  function convertMarkdownToHTML(markdown) {
+    let html = markdown;
+
+    // Headers
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+    // Bold
+    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+    html = html.replace(/__(.*?)__/gim, '<strong>$1</strong>');
+
+    // Italic
+    html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+    html = html.replace(/_(.*?)_/gim, '<em>$1</em>');
+
+    // Strikethrough
+    html = html.replace(/~~(.*?)~~/gim, '<del>$1</del>');
+
+    // Code blocks
+    html = html.replace(/```([\s\S]*?)```/gim, '<pre><code>$1</code></pre>');
+
+    // Inline code
+    html = html.replace(/`(.*?)`/gim, '<code>$1</code>');
+
+    // Links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank">$1</a>');
+
+    // Images
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/gim, '<img src="$2" alt="$1" style="max-width: 100%; height: auto;">');
+
+    // Blockquotes
+    html = html.replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>');
+
+    // Lists
+    html = html.replace(/^\* (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^\- (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^\+ (.*$)/gim, '<li>$1</li>');
+    html = html.replace(/^(\d+)\. (.*$)/gim, '<li>$1. $2</li>');
+
+    // Wrap consecutive <li> elements in <ul>
+    html = html.replace(/(<li>.*<\/li>)/gims, function(match) {
+      return '<ul>' + match.replace(/<\/li>\s*<li>/gim, '</li><li>') + '</ul>';
+    });
+
+    // Line breaks
+    html = html.replace(/\n\n/gim, '</p><p>');
+    html = html.replace(/\n/gim, '<br>');
+
+    // Wrap in paragraphs
+    if (html && !html.startsWith('<')) {
+      html = '<p>' + html + '</p>';
+    }
+
+    return html;
+  }
 </script>
 
 <style>
@@ -389,6 +761,301 @@
     font-size: 0.875rem;
     color: #6b7280;
     margin: 8px 0 0;
+  }
+
+  .markdown-badge {
+    background: #10b981;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 8px;
+  }
+
+  .markdown-editor {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .markdown-editor:focus-within {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  }
+
+  .markdown-toolbar {
+    background: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    padding: 6px 8px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    color: #374151;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 32px;
+    justify-content: center;
+  }
+
+  .toolbar-btn:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+  }
+
+  .toolbar-btn:active {
+    background: #d1d5db;
+  }
+
+  .toolbar-separator {
+    width: 1px;
+    height: 24px;
+    background: #d1d5db;
+    margin: 0 4px;
+  }
+
+  .markdown-textarea {
+    border: none;
+    border-radius: 0;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.9rem;
+  }
+
+  .markdown-textarea:focus {
+    box-shadow: none;
+    border-color: transparent;
+  }
+
+  .markdown-help {
+    margin-top: 12px;
+  }
+
+  .markdown-guide-toggle {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+    margin-left: 8px;
+  }
+
+  .markdown-guide-toggle:hover {
+    color: #5a67d8;
+    text-decoration: underline;
+  }
+
+  .markdown-guide {
+    margin-top: 16px;
+    padding: 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+  }
+
+  .markdown-guide h4 {
+    margin: 0 0 12px;
+    color: #374151;
+    font-size: 1rem;
+  }
+
+  .guide-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .guide-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .guide-item strong {
+    color: #1f2937;
+    font-size: 0.9rem;
+  }
+
+  .guide-item code {
+    background: #e2e8f0;
+    color: #475569;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  .upload-message {
+    padding: 8px 12px;
+    margin: 8px 0;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  .upload-success {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+  }
+
+  .upload-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+
+  .editor-container {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .editor-container.split-view {
+    flex-direction: row;
+    gap: 16px;
+  }
+
+  .editor-container.split-view .markdown-textarea {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .preview-pane {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+  }
+
+  .preview-content {
+    padding: 16px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #374151;
+  }
+
+  .preview-placeholder {
+    color: #9ca3af;
+    font-style: italic;
+    text-align: center;
+    margin: 40px 0;
+  }
+
+  /* Preview content styling */
+  .preview-content h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin: 0 0 16px;
+    line-height: 1.2;
+  }
+
+  .preview-content h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 24px 0 12px;
+    line-height: 1.3;
+  }
+
+  .preview-content h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 20px 0 10px;
+    line-height: 1.3;
+  }
+
+  .preview-content p {
+    margin: 0 0 16px;
+  }
+
+  .preview-content p:last-child {
+    margin-bottom: 0;
+  }
+
+  .preview-content ul, .preview-content ol {
+    margin: 0 0 16px;
+    padding-left: 20px;
+  }
+
+  .preview-content li {
+    margin-bottom: 4px;
+  }
+
+  .preview-content blockquote {
+    border-left: 4px solid #667eea;
+    padding-left: 16px;
+    margin: 16px 0;
+    font-style: italic;
+    color: #4b5563;
+  }
+
+  .preview-content code {
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.9em;
+    color: #e53e3e;
+  }
+
+  .preview-content pre {
+    background: #1f2937;
+    color: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 16px 0;
+  }
+
+  .preview-content pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  .preview-content img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 8px 0;
+  }
+
+  .preview-content a {
+    color: #667eea;
+    text-decoration: none;
+  }
+
+  .preview-content a:hover {
+    color: #5a67d8;
+    text-decoration: underline;
+  }
+
+  @media (max-width: 768px) {
+    .editor-container.split-view {
+      flex-direction: column;
+    }
+
+    .preview-content {
+      max-height: 300px;
+    }
   }
   
   .radio-group {

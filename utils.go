@@ -1,8 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
+	"html/template"
 	"math/big"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer/html"
 )
 
 // GenerateSecureToken creates a cryptographically secure random token
@@ -71,4 +78,63 @@ func GenerateSecurePassword(length int) string {
 	}
 
 	return string(password)
+}
+
+// MarkdownToHTML converts markdown content to HTML using goldmark
+func MarkdownToHTML(markdown string) (template.HTML, error) {
+	// Configure goldmark with extensions
+	md := goldmark.New(
+		goldmark.WithExtensions(
+			extension.GFM,        // GitHub Flavored Markdown
+			extension.Table,      // Tables
+			extension.Strikethrough, // ~~strikethrough~~
+			extension.Linkify,    // Auto-link URLs
+			extension.TaskList,   // - [ ] task lists
+		),
+		goldmark.WithParserOptions(
+			parser.WithAutoHeadingID(), // Auto-generate heading IDs
+		),
+		goldmark.WithRendererOptions(
+			html.WithHardWraps(),   // Convert line breaks to <br>
+			html.WithXHTML(),       // XHTML compatible output
+			html.WithUnsafe(),      // Allow raw HTML (for images, etc.)
+		),
+	)
+
+	var buf bytes.Buffer
+	if err := md.Convert([]byte(markdown), &buf); err != nil {
+		return "", err
+	}
+
+	return template.HTML(buf.String()), nil
+}
+
+// IsMarkdownContent checks if content contains common markdown syntax
+func IsMarkdownContent(content string) bool {
+	// Simple heuristics to detect markdown content
+	markdownIndicators := []string{
+		"#", "##", "###",      // Headers
+		"**", "__",            // Bold
+		"*", "_",              // Italic
+		"- ", "* ", "+ ",      // Lists
+		"```", "`",            // Code
+		"[", "](",             // Links
+		"![", "![alt](",       // Images
+		"|",                   // Tables
+		">",                   // Blockquotes
+	}
+
+	for _, indicator := range markdownIndicators {
+		if bytes.Contains([]byte(content), []byte(indicator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// SanitizeMarkdown performs basic sanitization on markdown content
+func SanitizeMarkdown(markdown string) string {
+	// Basic sanitization - can be extended with more rules
+	// For now, just trim whitespace
+	return string(bytes.TrimSpace([]byte(markdown)))
 }
