@@ -6,7 +6,15 @@
     
     <nav class="main-nav">
       <ul class="nav-links">
-        <li><a href="/" class="nav-link">Home</a></li>
+        {% for item in NavigationItems %}
+        <li>
+          <a href="{{ item.URL }}"
+             class="nav-link"
+             {% if item.Target == "_blank" %}target="_blank" rel="noopener noreferrer"{% endif %}>
+            {{ item.Title }}
+          </a>
+        </li>
+        {% endfor %}
       </ul>
     </nav>
     

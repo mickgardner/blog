@@ -39,8 +39,8 @@ func main() {
 	app.SetupTemplatesAndStaticFiles()
 	app.DefineRoutes()
 
-	AppLogger.WithField("port", 3000).Info("Blog application ready to serve requests")
-	log.Fatal(app.Router.Listen(":3000"))
+	AppLogger.WithField("port", app.Config.Port).Info("Blog application ready to serve requests")
+	log.Fatal(app.Router.Listen(":" + app.Config.Port))
 }
 
 func (a *App) SetupTemplatesAndStaticFiles() {
@@ -108,6 +108,15 @@ func (a *App) DefineRoutes() {
 	// Admin - User management
 	a.Router.Get("/admin/invite", a.RequireAuth, a.RequireAdmin, a.InviteFormHandler)
 	a.Router.Post("/admin/invite", a.RequireAuth, a.RequireAdmin, a.SendInviteHandler)
+
+	// Admin - Navigation management
+	a.Router.Get("/admin/navigation", a.RequireAuth, a.RequireAdmin, a.NavigationManagementHandler)
+	a.Router.Get("/admin/navigation/new", a.RequireAuth, a.RequireAdmin, a.NewNavigationHandler)
+	a.Router.Post("/admin/navigation/create", a.RequireAuth, a.RequireAdmin, a.CreateNavigationHandler)
+	a.Router.Get("/admin/navigation/:id/edit", a.RequireAuth, a.RequireAdmin, a.EditNavigationHandler)
+	a.Router.Post("/admin/navigation/:id/update", a.RequireAuth, a.RequireAdmin, a.UpdateNavigationHandler)
+	a.Router.Post("/admin/navigation/:id/toggle", a.RequireAuth, a.RequireAdmin, a.ToggleNavigationHandler)
+	a.Router.Post("/admin/navigation/:id/delete", a.RequireAuth, a.RequireAdmin, a.DeleteNavigationHandler)
 
 	// Image upload for Markdown editor
 	a.Router.Post("/admin/upload-image", a.RequireAuth, a.RequireAdmin, a.UploadImageHandler)

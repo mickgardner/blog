@@ -10,6 +10,7 @@ type Config struct {
 	Env              string
 	DBName           string
 	Version          string
+	Port             string // HTTP server port
 	BaseURL          string // Base URL for the application (e.g., https://blog.example.com)
 	RedisURL         string
 	RedisPort        string
@@ -36,15 +37,23 @@ func LoadConfig() Config {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
+
+	// Get port with default fallback
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000" // Default port
+	}
+
 	baseURL := os.Getenv("BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:3000" // Default for development
+		baseURL = "http://localhost:" + port // Default for development
 	}
 
 	config := Config{
 		Env:              os.Getenv("ENV"),
 		DBName:           os.Getenv("DBNAME"),
 		Version:          os.Getenv("VERSION"),
+		Port:             port,
 		BaseURL:          baseURL,
 		RedisURL:         os.Getenv("REDIS_URL"),
 		RedisPort:        os.Getenv("REDIS_PORT"),
@@ -64,7 +73,7 @@ func LoadConfig() Config {
 		AdminEmail:       os.Getenv("ADMIN_EMAIL"),
 	}
 	// Log safe configuration info only (structured logging not yet available)
-	log.Printf("Configuration loaded: ENV=%s, VERSION=%s, EMAIL_SERVICE=%s",
-		config.Env, config.Version, config.EmailService)
+	log.Printf("Configuration loaded: ENV=%s, VERSION=%s, PORT=%s, EMAIL_SERVICE=%s",
+		config.Env, config.Version, config.Port, config.EmailService)
 	return config
 }

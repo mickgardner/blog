@@ -16,7 +16,7 @@ func SetupDatabase(config Config) *gorm.DB {
 		log.Println("Automigrating...")
 		
 		// Auto-migrate all tables
-		db.AutoMigrate(Article{}, Page{}, VerificationCode{}, PasswordResetToken{}, User{}, EmailQueue{}, Invitation{})
+		db.AutoMigrate(Article{}, Page{}, NavigationItem{}, Session{}, VerificationCode{}, PasswordResetToken{}, User{}, EmailQueue{}, Invitation{})
 	}
 
 	return db
@@ -25,9 +25,12 @@ func SetupDatabase(config Config) *gorm.DB {
 
 func (a *App) SeedDatabase() {
 	log.Println("Seeding database...")
-	
+
 	// Create super admin user if configured and doesn't exist
 	a.CreateSuperAdmin()
+
+	// Seed default navigation items
+	a.SeedDefaultNavigation()
 	
 	if a.Config.Env == "Development" {
 		var count int64

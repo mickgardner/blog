@@ -14,17 +14,25 @@ import (
 	"time"
 )
 
-// GetTemplateData returns base template data including current user
+// GetTemplateData returns base template data including current user and navigation
 func (a *App) GetTemplateData(c *fiber.Ctx, data fiber.Map) fiber.Map {
 	if data == nil {
 		data = fiber.Map{}
 	}
-	
+
 	// Add user from locals
 	user := c.Locals("User")
 	data["User"] = user
 	data["IsAuthenticated"] = user != nil
-	
+
+	// Add navigation items for header
+	navigationItems, err := a.GetActiveNavigationItems()
+	if err != nil {
+		LogHTTP().WithError(err).Warn("Failed to load navigation items for template")
+		navigationItems = []NavigationItem{} // Fallback to empty slice
+	}
+	data["NavigationItems"] = navigationItems
+
 	return data
 }
 
@@ -1406,3 +1414,235 @@ func (a *App) DeletePageHandler(c *fiber.Ctx) error {
 }
 
 // isValidSlug is now in validation.go
+
+// NAVIGATION HANDLERS
+
+// Show navigation management list
+func (a *App) NavigationManagementHandler(c *fiber.Ctx) error {
+	items, err := a.GetAllNavigationItems()
+	if err != nil {
+		LogHTTP().WithError(err).Error("Failed to fetch navigation items")
+		return fiber.ErrInternalServerError
+	}
+
+	return c.Render("admin/navigation", a.GetTemplateData(c, fiber.Map{
+		"Title":          "Navigation Management",
+		"NavigationPage": true,
+		"Items":          items,
+		"Success":        c.Query("success"),
+		"Error":          c.Query("error"),
+	}), "layouts/admin")
+}
+
+// Show new navigation item form
+func (a *App) NewNavigationHandler(c *fiber.Ctx) error {
+	return c.Render("admin/navigation-form", a.GetTemplateData(c, fiber.Map{
+		"Title":             "New Navigation Item",
+		"NewNavigationPage": true,
+		"Item":              NavigationItem{Target: "_self"}, // Default values
+	}), "layouts/admin")
+}
+
+// Create new navigation item
+func (a *App) CreateNavigationHandler(c *fiber.Ctx) error {
+	user, err := a.GetCurrentUser(c)
+	if err != nil {
+		return c.Redirect("/login")
+	}
+
+	title := strings.TrimSpace(c.FormValue("title"))
+	url := strings.TrimSpace(c.FormValue("url"))
+	target := strings.TrimSpace(c.FormValue("target"))
+	orderStr := strings.TrimSpace(c.FormValue("order"))
+
+	// Parse order
+	order := 0
+	if orderStr != "" {
+		if parsedOrder, parseErr := strconv.Atoi(orderStr); parseErr == nil {
+			order = parsedOrder
+		}
+	}
+
+	// Validate required fields
+	if title == "" || url == "" {
+		return c.Render("admin/navigation-form", a.GetTemplateData(c, fiber.Map{
+			"Title":             "New Navigation Item",
+			"NewNavigationPage": true,
+			"Item": NavigationItem{
+				Title:  title,
+				URL:    url,
+				Target: target,
+				Order:  order,
+			},
+			"Error": "Title and URL are required",
+		}), "layouts/admin")
+	}
+
+	// Create the navigation item
+	item, err := a.CreateNavigationItem(title, url, order, target)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"user":  SanitizeEmail(user.EmailAddress),
+			"title": title,
+			"url":   url,
+			"error": err.Error(),
+		}).Error("Failed to create navigation item")
+
+		return c.Render("admin/navigation-form", a.GetTemplateData(c, fiber.Map{
+			"Title":             "New Navigation Item",
+			"NewNavigationPage": true,
+			"Item": NavigationItem{
+				Title:  title,
+				URL:    url,
+				Target: target,
+				Order:  order,
+			},
+			"Error": err.Error(),
+		}), "layouts/admin")
+	}
+
+	LogHTTP().WithFields(map[string]interface{}{
+		"user":    SanitizeEmail(user.EmailAddress),
+		"item_id": item.ID,
+		"title":   item.Title,
+		"url":     item.URL,
+	}).Info("Navigation item created successfully")
+
+	return c.Redirect("/admin/navigation?success=Navigation item created successfully!")
+}
+
+// Show edit navigation item form
+func (a *App) EditNavigationHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	item, err := a.GetNavigationItemByID(id)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"id":    id,
+			"error": err.Error(),
+		}).Error("Navigation item not found")
+		return fiber.ErrNotFound
+	}
+
+	return c.Render("admin/navigation-form", a.GetTemplateData(c, fiber.Map{
+		"Title":          "Edit Navigation Item",
+		"NavigationPage": true,
+		"Item":           item,
+	}), "layouts/admin")
+}
+
+// Update existing navigation item
+func (a *App) UpdateNavigationHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	itemID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	title := strings.TrimSpace(c.FormValue("title"))
+	url := strings.TrimSpace(c.FormValue("url"))
+	target := strings.TrimSpace(c.FormValue("target"))
+	active := c.FormValue("active") == "on"
+	orderStr := strings.TrimSpace(c.FormValue("order"))
+
+	// Parse order
+	order := 0
+	if orderStr != "" {
+		if parsedOrder, parseErr := strconv.Atoi(orderStr); parseErr == nil {
+			order = parsedOrder
+		}
+	}
+
+	// Get original item for form repopulation on error
+	originalItem, err := a.GetNavigationItemByID(id)
+	if err != nil {
+		return fiber.ErrNotFound
+	}
+
+	// Validate required fields
+	if title == "" || url == "" {
+		return c.Render("admin/navigation-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Navigation Item",
+			"Item": NavigationItem{
+				Model:  originalItem.Model,
+				Title:  title,
+				URL:    url,
+				Target: target,
+				Order:  order,
+				Active: active,
+			},
+			"Error": "Title and URL are required",
+		}), "layouts/admin")
+	}
+
+	// Update the navigation item
+	err = a.UpdateNavigationItem(uint(itemID), title, url, order, target, active)
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"item_id": itemID,
+			"error":   err.Error(),
+		}).Error("Failed to update navigation item")
+
+		return c.Render("admin/navigation-form", a.GetTemplateData(c, fiber.Map{
+			"Title": "Edit Navigation Item",
+			"Item": NavigationItem{
+				Model:  originalItem.Model,
+				Title:  title,
+				URL:    url,
+				Target: target,
+				Order:  order,
+				Active: active,
+			},
+			"Error": err.Error(),
+		}), "layouts/admin")
+	}
+
+	LogHTTP().WithFields(map[string]interface{}{
+		"item_id": itemID,
+		"title":   title,
+		"url":     url,
+	}).Info("Navigation item updated successfully")
+
+	return c.Redirect("/admin/navigation?success=Navigation item updated successfully!")
+}
+
+// Toggle navigation item active status
+func (a *App) ToggleNavigationHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	itemID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	err = a.ToggleNavigationItem(uint(itemID))
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"item_id": itemID,
+			"error":   err.Error(),
+		}).Error("Failed to toggle navigation item")
+		return c.Redirect("/admin/navigation?error=" + "Failed to toggle navigation item")
+	}
+
+	LogHTTP().WithField("item_id", itemID).Info("Navigation item toggled")
+	return c.Redirect("/admin/navigation?success=" + "Navigation item updated successfully!")
+}
+
+// Delete navigation item
+func (a *App) DeleteNavigationHandler(c *fiber.Ctx) error {
+	id := c.Params("id")
+	itemID, err := strconv.ParseUint(id, 10, 32)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+
+	err = a.DeleteNavigationItem(uint(itemID))
+	if err != nil {
+		LogHTTP().WithFields(map[string]interface{}{
+			"item_id": itemID,
+			"error":   err.Error(),
+		}).Error("Failed to delete navigation item")
+		return c.Redirect("/admin/navigation?error=" + "Failed to delete navigation item")
+	}
+
+	LogHTTP().WithField("item_id", itemID).Info("Navigation item deleted")
+	return c.Redirect("/admin/navigation?success=" + "Navigation item deleted successfully!")
+}

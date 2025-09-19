@@ -59,7 +59,25 @@
             </li>
           </ul>
         </div>
-        
+
+        <div class="nav-section">
+          <h3 class="nav-section-title">Site</h3>
+          <ul class="nav-menu">
+            <li class="nav-item">
+              <a href="/admin/navigation" class="nav-link {{ NavigationPage|yesno:'active,' }}">
+                <span class="nav-icon">🧭</span>
+                <span class="nav-text">Navigation</span>
+              </a>
+            </li>
+            <li class="nav-item nav-sub-item">
+              <a href="/admin/navigation/new" class="nav-link {{ NewNavigationPage|yesno:'active,' }}">
+                <span class="nav-icon">➕</span>
+                <span class="nav-text">Add Menu Item</span>
+              </a>
+            </li>
+          </ul>
+        </div>
+
         <div class="nav-section">
           <h3 class="nav-section-title">Users</h3>
           <ul class="nav-menu">

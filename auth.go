@@ -199,37 +199,53 @@ func (a *App) getUserByEmailInTx(tx *gorm.DB, email string) (*User, error) {
 //  - DestroySession - Logout functionality
 
 func (a *App) SetupSessions() {
-	redisDB, err := strconv.Atoi(a.Config.RedisDB)
-	if err != nil {
-		redisDB = 0
-	}
-
-	redisPort, err := strconv.Atoi(a.Config.RedisPort)
-	if err != nil {
-		redisPort = 6379
-	}
-
-	storage := redis.New(redis.Config{
-		Host:     a.Config.RedisURL,
-		Port:     redisPort,
-		Username: "",
-		Password: a.Config.RedisPassword,
-		Database: redisDB,
-		Reset:    false,
-	})
-
 	// Set secure cookies in production
 	cookieSecure := a.Config.Env != "Development"
 
-	a.SessionStore = session.New(session.Config{
-		Storage:        storage,
-		KeyLookup:      "cookie:session_id",
-		CookieSecure:   cookieSecure,
-		CookieHTTPOnly: true,
-		Expiration:     24 * time.Hour,
-	})
+	// Check if Redis is configured
+	if a.Config.RedisURL != "" {
+		// Use Redis if configured
+		redisDB, err := strconv.Atoi(a.Config.RedisDB)
+		if err != nil {
+			redisDB = 0
+		}
 
-	LogDB().Info("Session store configured with Redis")
+		redisPort, err := strconv.Atoi(a.Config.RedisPort)
+		if err != nil {
+			redisPort = 6379
+		}
+
+		storage := redis.New(redis.Config{
+			Host:     a.Config.RedisURL,
+			Port:     redisPort,
+			Username: "",
+			Password: a.Config.RedisPassword,
+			Database: redisDB,
+			Reset:    false,
+		})
+
+		a.SessionStore = session.New(session.Config{
+			Storage:        storage,
+			KeyLookup:      "cookie:session_id",
+			CookieSecure:   cookieSecure,
+			CookieHTTPOnly: true,
+			Expiration:     24 * time.Hour,
+		})
+
+		LogDB().Info("Session store configured with Redis")
+	} else {
+		// Use SQLite as fallback
+		a.SessionStore = CreateFiberSQLiteStore(a.DB)
+
+		// Configure session store settings
+		a.SessionStore.KeyLookup = "cookie:session_id"
+		a.SessionStore.CookieSecure = cookieSecure
+		a.SessionStore.CookieHTTPOnly = true
+		a.SessionStore.Expiration = 24 * time.Hour
+		a.SessionStore.CookieSameSite = "Lax"
+
+		LogDB().Info("Session store configured with SQLite")
+	}
 }
 
 func (a *App) CreateUserSession(c *fiber.Ctx, user *User) error {
